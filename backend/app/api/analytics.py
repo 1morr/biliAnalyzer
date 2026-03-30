@@ -133,7 +133,7 @@ async def video_comparison(
     )
 
 
-QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment", "user"}
+QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment", "user", "subtitle"}
 VIDEO_WC_TYPES = {"content", "interaction", "user"}
 
 
@@ -287,6 +287,8 @@ def _gather_query_texts(rows: list, wc_type: str) -> list[str]:
             texts.append(video.title or "")
         elif wc_type == "tag":
             texts.extend((video.tags or "").split(","))
+        elif wc_type == "subtitle" and content and content.subtitle:
+            texts.append(content.subtitle)
         elif wc_type == "danmaku" and content and content.danmakus:
             texts.extend(_extract_texts_from_items(_safe_json_loads(content.danmakus)))
         elif wc_type == "comment" and content and content.comments:
@@ -317,6 +319,8 @@ def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple]:
             annotated.append((bvid, title, video.title or "", None, "title"))
         elif wc_type == "tag":
             annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, "tag"))
+        elif wc_type == "subtitle" and content and content.subtitle:
+            annotated.append((bvid, title, content.subtitle, None, "subtitle"))
         elif wc_type == "danmaku" and content and content.danmakus:
             for item in normalize_items(_safe_json_loads(content.danmakus)):
                 annotated.append((bvid, title, item["text"], item["user"], "danmaku"))

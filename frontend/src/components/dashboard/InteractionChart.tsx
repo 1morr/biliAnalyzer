@@ -6,9 +6,10 @@ import type { InteractionData } from "@/types";
 
 interface InteractionChartProps {
   queryId: number;
+  totalViews?: number;
 }
 
-export default function InteractionChart({ queryId }: InteractionChartProps) {
+export default function InteractionChart({ queryId, totalViews }: InteractionChartProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<InteractionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,11 @@ export default function InteractionChart({ queryId }: InteractionChartProps) {
   ];
   const colors = ["#ef4444", "#f59e0b", "#a855f7", "#06b6d4"];
   const values = data ? [data.likes, data.coins, data.favorites, data.shares] : [];
+
+  const avgInteractionRate =
+    data && totalViews && totalViews > 0
+      ? ((data.likes + data.coins + data.favorites + data.shares) / totalViews * 100).toFixed(2)
+      : null;
 
   const option = {
     backgroundColor: "transparent",
@@ -81,7 +87,14 @@ export default function InteractionChart({ queryId }: InteractionChartProps) {
 
   return (
     <div>
-      <p className="mb-2 text-sm font-medium text-foreground">{t("chart.interaction")}</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-medium text-foreground">{t("chart.interaction")}</p>
+        {avgInteractionRate && (
+          <span className="text-xs text-muted-foreground">
+            {t("stats.interactionRate")}: <span className="font-semibold text-foreground">{avgInteractionRate}%</span>
+          </span>
+        )}
+      </div>
       <ReactECharts option={option} style={{ height: 220 }} />
     </div>
   );

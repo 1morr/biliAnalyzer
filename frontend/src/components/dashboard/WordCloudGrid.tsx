@@ -9,16 +9,20 @@ interface WordCloudGridProps {
   queryId: number;
 }
 
-type WordCloudType = "title" | "tag" | "danmaku" | "comment" | "user";
+type WordCloudType = "title" | "tag" | "danmaku" | "comment" | "user" | "subtitle";
 
 interface CloudDef {
   type: WordCloudType;
   labelKey: string;
 }
 
-const CLOUDS: CloudDef[] = [
+const LEFT_CLOUDS: CloudDef[] = [
   { type: "title", labelKey: "chart.wordcloud.title" },
   { type: "tag", labelKey: "chart.wordcloud.tag" },
+  { type: "subtitle", labelKey: "chart.wordcloud.subtitle" },
+];
+
+const RIGHT_CLOUDS: CloudDef[] = [
   { type: "danmaku", labelKey: "chart.wordcloud.danmaku" },
   { type: "comment", labelKey: "chart.wordcloud.comment" },
   { type: "user", labelKey: "chart.wordcloud.user" },
@@ -70,9 +74,16 @@ export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
   return (
     <div>
       <div className="grid grid-cols-2 gap-3">
-        {CLOUDS.map(({ type, labelKey }) => (
-          <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
-        ))}
+        <div className="flex flex-col gap-3">
+          {LEFT_CLOUDS.map(({ type, labelKey }) => (
+            <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          {RIGHT_CLOUDS.map(({ type, labelKey }) => (
+            <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
+          ))}
+        </div>
       </div>
     </div>
   );

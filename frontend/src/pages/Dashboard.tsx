@@ -161,7 +161,7 @@ export default function Dashboard() {
               <ViewsTrendChart queryId={queryId} />
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <InteractionChart queryId={queryId} />
+              <InteractionChart queryId={queryId} totalViews={stats?.total_views} />
             </div>
           </div>
         )}
