@@ -1,0 +1,5 @@
+.claude/
+.superpowers/
+__pycache__/
+*.pyc
+*.pyo
