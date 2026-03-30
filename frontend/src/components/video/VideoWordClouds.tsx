@@ -34,7 +34,6 @@ export default function VideoWordClouds({ bvid }: VideoWordCloudsProps) {
 
   return (
     <div>
-      <p className="mb-3 text-sm font-medium text-foreground">{t("chart.wordcloud.title")}</p>
       <div className="grid grid-cols-2 gap-3">
         <CloudImage
           src={api.videoWordcloudUrl(bvid, "content")}

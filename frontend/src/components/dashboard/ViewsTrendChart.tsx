@@ -46,10 +46,23 @@ export default function ViewsTrendChart({ queryId }: ViewsTrendChartProps) {
     series: [
       {
         name: t("chart.viewsTrend"),
-        type: "bar",
+        type: "line",
         data: data.map((p) => p.views),
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 6,
+        lineStyle: { color: "#3b82f6", width: 2 },
         itemStyle: { color: "#3b82f6" },
-        barMaxWidth: 40,
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: isDark ? "rgba(59,130,246,0.3)" : "rgba(59,130,246,0.2)" },
+              { offset: 1, color: "rgba(59,130,246,0)" },
+            ],
+          },
+        },
       },
     ],
     grid: { left: 50, right: 16, top: 16, bottom: 40 },

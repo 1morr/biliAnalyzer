@@ -1,3 +1,4 @@
+import { useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTranslation } from "react-i18next";
 import type { VideoSummary } from "@/types";
@@ -8,6 +9,7 @@ interface ScatterChartProps {
 
 export default function ScatterChart({ videos }: ScatterChartProps) {
   const { t } = useTranslation();
+  const [showTip, setShowTip] = useState(false);
 
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -22,7 +24,7 @@ export default function ScatterChart({ videos }: ScatterChartProps) {
       trigger: "item",
       formatter: (params: { data: { name: string; value: number[] } }) => {
         const d = params.data;
-        return `${d.name}<br/>Views: ${d.value[0].toLocaleString()}<br/>IR: ${(d.value[1] * 100).toFixed(2)}%`;
+        return `${d.name}<br/>Views: ${d.value[0].toLocaleString()}<br/>IR: ${d.value[1].toFixed(2)}%`;
       },
     },
     xAxis: {
@@ -45,7 +47,7 @@ export default function ScatterChart({ videos }: ScatterChartProps) {
       axisLabel: {
         color: isDark ? "#9ca3af" : "#6b7280",
         fontSize: 11,
-        formatter: (v: number) => `${(v * 100).toFixed(1)}%`,
+        formatter: (v: number) => `${v.toFixed(1)}%`,
       },
       splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
     },
@@ -70,7 +72,23 @@ export default function ScatterChart({ videos }: ScatterChartProps) {
 
   return (
     <div>
-      <p className="mb-2 text-sm font-medium text-foreground">{t("chart.scatter")}</p>
+      <div className="mb-2 flex items-center gap-1.5">
+        <p className="text-sm font-medium text-foreground">{t("chart.scatter")}</p>
+        <div className="relative">
+          <span
+            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground"
+            onMouseEnter={() => setShowTip(true)}
+            onMouseLeave={() => setShowTip(false)}
+          >
+            ?
+          </span>
+          {showTip && (
+            <div className="absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md border">
+              {t("chart.scatterFormula")}
+            </div>
+          )}
+        </div>
+      </div>
       <ReactECharts option={option} style={{ height: 220 }} />
     </div>
   );

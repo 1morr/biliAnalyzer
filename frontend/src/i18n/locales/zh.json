@@ -8,13 +8,14 @@
   },
   "chart": {
     "viewsTrend": "播放量趋势", "interaction": "互动数据对比",
-    "scatter": "播放量 vs 互动率", "wordcloud": { "title": "标题词云", "tag": "标签词云", "danmaku": "弹幕词云", "comment": "评论词云", "content": "内容词云", "interaction": "互动词云" }
+    "scatter": "播放量 vs 互动率", "scatterFormula": "互动率 = (点赞 + 投币 + 收藏 + 分享) / 播放量 × 100%", "wordcloud": { "title": "标题词云", "tag": "标签词云", "danmaku": "弹幕词云", "comment": "评论词云", "content": "内容词云", "interaction": "互动词云" }
   },
   "video": {
     "list": "视频列表", "detail": "视频详情", "sort": "排序",
     "openOnBilibili": "在B站打开", "backToDashboard": "返回仪表板",
     "duration": "时长", "publishedAt": "发布时间",
     "comparison": "本视频 vs 平均", "engagement": "互动分布",
+    "engagementTip": "百分比表示本视频相对于查询内所有视频平均值的差异",
     "thisVideo": "本视频", "average": "平均",
     "viewsLabel": "播放", "likesLabel": "点赞", "coinsLabel": "投币", "favsLabel": "收藏",
     "previous": "上一页", "next": "下一页", "pageOf": "第 {{page}} 页，共 {{total}} 页"

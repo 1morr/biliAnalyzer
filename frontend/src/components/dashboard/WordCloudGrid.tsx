@@ -48,7 +48,6 @@ export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
 
   return (
     <div>
-      <p className="mb-3 text-sm font-medium text-foreground">{t("chart.wordcloud.title")}</p>
       <div className="grid grid-cols-2 gap-3">
         {CLOUDS.map(({ type, labelKey }) => (
           <CloudImage

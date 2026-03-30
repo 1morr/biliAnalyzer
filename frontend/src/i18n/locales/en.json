@@ -8,13 +8,14 @@
   },
   "chart": {
     "viewsTrend": "Views Trend", "interaction": "Interaction Comparison",
-    "scatter": "Views vs Interaction Rate", "wordcloud": { "title": "Title Keywords", "tag": "Tag Cloud", "danmaku": "Danmaku Cloud", "comment": "Comment Cloud", "content": "Content Cloud", "interaction": "Interaction Cloud" }
+    "scatter": "Views vs Interaction Rate", "scatterFormula": "IR = (Likes + Coins + Favorites + Shares) / Views × 100%", "wordcloud": { "title": "Title Keywords", "tag": "Tag Cloud", "danmaku": "Danmaku Cloud", "comment": "Comment Cloud", "content": "Content Cloud", "interaction": "Interaction Cloud" }
   },
   "video": {
     "list": "Videos", "detail": "Video Detail", "sort": "Sort",
     "openOnBilibili": "Open on Bilibili", "backToDashboard": "Back to Dashboard",
     "duration": "Duration", "publishedAt": "Published",
     "comparison": "This Video vs Average", "engagement": "Engagement Breakdown",
+    "engagementTip": "Percentage shows this video's difference from the average of all videos in the query",
     "thisVideo": "This Video", "average": "Average",
     "viewsLabel": "Views", "likesLabel": "Likes", "coinsLabel": "Coins", "favsLabel": "Favs",
     "previous": "Previous", "next": "Next", "pageOf": "Page {{page}} of {{total}}"
