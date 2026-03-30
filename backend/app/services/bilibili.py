@@ -102,31 +102,41 @@ class BilibiliClient:
         return sanitized
 
     async def _throttle(self):
-        """Ensure at least 1 second between requests."""
+        """Ensure at least 1.5 seconds between requests."""
         async with self._semaphore:
             now = time.time()
-            wait = max(0, 1.0 - (now - self._last_request_time))
+            wait = max(0, 1.5 - (now - self._last_request_time))
             if wait > 0:
                 await asyncio.sleep(wait)
             self._last_request_time = time.time()
 
     async def _request(self, url: str, params: dict | None = None, wbi: bool = False) -> dict:
         await self._ensure_fingerprint()
-        await self._throttle()
         raw_params = params
-        if wbi:
-            if not self._img_key or time.time() - self._wbi_keys_ts > self._WBI_KEY_TTL:
-                await self._refresh_wbi_keys()
-            params = self._sign_wbi(raw_params or {})
-        resp = await self._client.get(url, params=params)
-        # Retry once with refreshed keys on 412
-        if resp.status_code == 412 and wbi:
-            await self._refresh_wbi_keys()
-            params = self._sign_wbi(raw_params or {})
+        max_retries = 3
+        for attempt in range(max_retries):
             await self._throttle()
+            if wbi:
+                if not self._img_key or time.time() - self._wbi_keys_ts > self._WBI_KEY_TTL:
+                    await self._refresh_wbi_keys()
+                params = self._sign_wbi(raw_params or {})
             resp = await self._client.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
+            # Retry with refreshed keys on 412
+            if resp.status_code == 412 and wbi:
+                await self._refresh_wbi_keys()
+                params = self._sign_wbi(raw_params or {})
+                await self._throttle()
+                resp = await self._client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            # Retry on rate limit (-799)
+            if data.get("code") == -799 and attempt < max_retries - 1:
+                delay = 3 * (attempt + 1)
+                logger.warning("Rate limited (-799), retrying in %ds (attempt %d/%d)", delay, attempt + 1, max_retries)
+                await asyncio.sleep(delay)
+                continue
+            return data
+        return data  # return last response if all retries exhausted
 
     async def _refresh_wbi_keys(self):
         await self._ensure_fingerprint()
