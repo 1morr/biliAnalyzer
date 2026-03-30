@@ -92,7 +92,7 @@ async def video_comparison(
 
     count = len(latest_per) or 1
     metrics = ["views", "likes", "coins", "favorites", "shares", "danmaku_count", "comment_count"]
-    labels = ["Views", "Likes", "Coins", "Favorites", "Shares", "Danmaku", "Comments"]
+    labels = ["views", "likes", "coins", "favorites", "shares", "danmaku", "comments"]
 
     video_values = [float(getattr(video_stats, m)) for m in metrics]
     avg_values = [sum(getattr(s, m) for s in latest_per.values()) / count for m in metrics]

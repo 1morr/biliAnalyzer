@@ -14,7 +14,10 @@
     "list": "Videos", "detail": "Video Detail", "sort": "Sort",
     "openOnBilibili": "Open on Bilibili", "backToDashboard": "Back to Dashboard",
     "duration": "Duration", "publishedAt": "Published",
-    "comparison": "This Video vs Average", "engagement": "Engagement Breakdown"
+    "comparison": "This Video vs Average", "engagement": "Engagement Breakdown",
+    "thisVideo": "This Video", "average": "Average",
+    "viewsLabel": "Views", "likesLabel": "Likes", "coinsLabel": "Coins", "favsLabel": "Favs",
+    "previous": "Previous", "next": "Next", "pageOf": "Page {{page}} of {{total}}"
   },
   "ai": { "title": "AI Analysis", "analyze": "AI Analysis", "regenerate": "Regenerate", "notConfigured": "Please configure AI first", "analyzing": "Analyzing..." },
   "settings": {

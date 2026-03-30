@@ -6,10 +6,18 @@ interface RadarChartProps {
   data: VideoComparison | null;
 }
 
-const METRIC_LABELS = ["Views", "Likes", "Coins", "Favorites", "Shares", "Danmaku", "Comments"];
-
 export default function RadarChart({ data }: RadarChartProps) {
   const { t } = useTranslation();
+
+  const METRIC_LABELS = [
+    t("stats.totalViews"),
+    t("stats.likes"),
+    t("stats.coins"),
+    t("stats.favorites"),
+    t("stats.shares"),
+    t("stats.danmaku"),
+    t("stats.comments"),
+  ];
 
   if (!data) {
     return (
@@ -43,7 +51,7 @@ export default function RadarChart({ data }: RadarChartProps) {
       trigger: "item",
     },
     legend: {
-      data: [t("video.comparison").split(" vs ")[0] || "This Video", "Average"],
+      data: [t("video.thisVideo"), t("video.average")],
       bottom: 0,
       textStyle: { color: axisLabelColor, fontSize: 12 },
     },
@@ -63,14 +71,14 @@ export default function RadarChart({ data }: RadarChartProps) {
         data: [
           {
             value: videoNorm,
-            name: "This Video",
+            name: t("video.thisVideo"),
             areaStyle: { color: "rgba(99,102,241,0.3)" },
             lineStyle: { color: "#6366f1", width: 2 },
             itemStyle: { color: "#6366f1" },
           },
           {
             value: avgNorm,
-            name: "Average",
+            name: t("video.average"),
             areaStyle: { color: "rgba(239,68,68,0.05)" },
             lineStyle: { color: "#ef4444", width: 2, type: "dashed" },
             itemStyle: { color: "#ef4444" },

@@ -8,6 +8,17 @@ interface ComparisonBarsProps {
 export default function ComparisonBars({ data }: ComparisonBarsProps) {
   const { t } = useTranslation();
 
+  // Metric name translation map
+  const metricTranslations: Record<string, string> = {
+    views: t("stats.totalViews"),
+    likes: t("stats.likes"),
+    coins: t("stats.coins"),
+    favorites: t("stats.favorites"),
+    shares: t("stats.shares"),
+    danmaku: t("stats.danmaku"),
+    comments: t("stats.comments"),
+  };
+
   if (!data) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
@@ -32,7 +43,7 @@ export default function ComparisonBars({ data }: ComparisonBarsProps) {
           return (
             <div key={metric} className="flex flex-col gap-1">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-foreground capitalize">{metric}</span>
+                <span className="text-foreground">{metricTranslations[metric] || metric}</span>
                 <span className={`font-medium ${textColor}`}>
                   {isPositive ? "+" : "-"}{displayPct.toFixed(1)}%
                 </span>

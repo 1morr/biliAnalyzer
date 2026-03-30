@@ -45,6 +45,7 @@ interface VideoRowProps {
 }
 
 function VideoRow({ video, queryId }: VideoRowProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const tags = video.tags ? video.tags.split(",").slice(0, 3) : [];
 
@@ -73,10 +74,10 @@ function VideoRow({ video, queryId }: VideoRowProps) {
       <div className="flex flex-1 flex-col gap-1 min-w-0">
         <p className="truncate font-semibold text-sm text-foreground">{video.title}</p>
         <p className="text-xs text-muted-foreground">
-          Views: {formatNumber(video.stats.views)} ·{" "}
-          Likes: {formatNumber(video.stats.likes)} ·{" "}
-          Coins: {formatNumber(video.stats.coins)} ·{" "}
-          Favs: {formatNumber(video.stats.favorites)}
+          {t("video.viewsLabel")}: {formatNumber(video.stats.views)} ·{" "}
+          {t("video.likesLabel")}: {formatNumber(video.stats.likes)} ·{" "}
+          {t("video.coinsLabel")}: {formatNumber(video.stats.coins)} ·{" "}
+          {t("video.favsLabel")}: {formatNumber(video.stats.favorites)}
         </p>
         <div className="flex flex-wrap items-center gap-1">
           {tags.map((tag) => (
@@ -165,7 +166,9 @@ export default function VideoList({ queryId }: VideoListProps) {
         <div className="flex items-center gap-2">
           <Select value={sortBy} onValueChange={handleSortChange}>
             <SelectTrigger size="sm" className="w-36">
-              <SelectValue />
+              <SelectValue>
+                {sortOptions.find(opt => opt.value === sortBy)?.label}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {sortOptions.map((opt) => (
@@ -211,10 +214,10 @@ export default function VideoList({ queryId }: VideoListProps) {
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1 || loading}
           >
-            Previous
+            {t("video.previous")}
           </Button>
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            {t("video.pageOf", { page, total: totalPages })}
           </span>
           <Button
             variant="outline"
@@ -222,7 +225,7 @@ export default function VideoList({ queryId }: VideoListProps) {
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages || loading}
           >
-            Next
+            {t("video.next")}
           </Button>
         </div>
       )}

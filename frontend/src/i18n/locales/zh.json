@@ -14,7 +14,10 @@
     "list": "视频列表", "detail": "视频详情", "sort": "排序",
     "openOnBilibili": "在B站打开", "backToDashboard": "返回仪表板",
     "duration": "时长", "publishedAt": "发布时间",
-    "comparison": "本视频 vs 平均", "engagement": "互动分布"
+    "comparison": "本视频 vs 平均", "engagement": "互动分布",
+    "thisVideo": "本视频", "average": "平均",
+    "viewsLabel": "播放", "likesLabel": "点赞", "coinsLabel": "投币", "favsLabel": "收藏",
+    "previous": "上一页", "next": "下一页", "pageOf": "第 {{page}} 页，共 {{total}} 页"
   },
   "ai": { "title": "AI 分析", "analyze": "AI 分析", "regenerate": "重新生成", "notConfigured": "请先配置AI", "analyzing": "分析中..." },
   "settings": {
