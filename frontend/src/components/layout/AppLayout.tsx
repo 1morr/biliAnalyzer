@@ -1,8 +1,29 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import type { QueryDetail } from "@/types";
+
+export interface DashboardContext {
+  setQueryDetail: (q: QueryDetail | undefined) => void;
+  setOnAiClick: (fn: (() => void) | undefined) => void;
+}
+
+export function useDashboardContext() {
+  return useOutletContext<DashboardContext>();
+}
 
 export default function AppLayout() {
+  const [queryDetail, setQueryDetail] = useState<QueryDetail | undefined>(undefined);
+  const [onAiClick, setOnAiClickState] = useState<(() => void) | undefined>(undefined);
+
+  // Wrap setter so Dashboard can pass a function reference cleanly
+  function setOnAiClick(fn: (() => void) | undefined) {
+    setOnAiClickState(fn ? () => fn : undefined);
+  }
+
+  const context: DashboardContext = { setQueryDetail, setOnAiClick };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
       {/* Fixed-width sidebar */}
@@ -10,9 +31,9 @@ export default function AppLayout() {
 
       {/* Main content: TopBar + routed page */}
       <div className="flex flex-1 flex-col min-w-0">
-        <TopBar />
+        <TopBar queryDetail={queryDetail} onAiClick={onAiClick} />
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <Outlet context={context} />
         </main>
       </div>
     </div>
