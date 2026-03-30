@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -60,6 +60,31 @@ export default function NewQueryDialog({
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
+  const [hasSessdata, setHasSessdata] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let ignore = false;
+
+    async function loadSettings() {
+      try {
+        const settings = await api.getSettings();
+        if (!ignore) {
+          setHasSessdata(Boolean(settings.sessdata));
+        }
+      } catch {
+        if (!ignore) {
+          setHasSessdata(false);
+        }
+      }
+    }
+
+    void loadSettings();
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
 
   const presets: Preset[] = ["7d", "30d", "3m", "6m", "1y", "all"];
 
@@ -70,17 +95,28 @@ export default function NewQueryDialog({
     setEndDate(end);
   }
 
+  function resetForm() {
+    setUid("");
+    setStartDate("");
+    setEndDate("");
+    setActivePreset(null);
+    setHasSessdata(null);
+  }
+
+  function handleDialogOpenChange(nextOpen: boolean) {
+    onOpenChange(nextOpen);
+    if (!nextOpen) {
+      resetForm();
+    }
+  }
+
   async function handleSubmit() {
     if (!uid || !startDate || !endDate) return;
     setLoading(true);
     try {
       await api.fetch(Number(uid), startDate, endDate);
       onFetchStarted();
-      onOpenChange(false);
-      setUid("");
-      setStartDate("");
-      setEndDate("");
-      setActivePreset(null);
+      handleDialogOpenChange(false);
     } catch (err) {
       console.error("Fetch failed:", err);
     } finally {
@@ -89,21 +125,23 @@ export default function NewQueryDialog({
   }
 
   function handleCancel() {
-    onOpenChange(false);
-    setUid("");
-    setStartDate("");
-    setEndDate("");
-    setActivePreset(null);
+    handleDialogOpenChange(false);
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("app.newQuery")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
+          {hasSessdata === false && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+              {t("query.sessdataWarning")}
+            </div>
+          )}
+
           {/* UID input */}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="uid-input">{t("query.uid")}</Label>

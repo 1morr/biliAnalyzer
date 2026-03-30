@@ -31,5 +31,10 @@
     "data": "数据管理", "clearAll": "清除所有数据", "clearConfirm": "确定要清除所有数据吗？"
   },
   "common": { "loading": "加载中...", "error": "出错了", "noData": "暂无数据", "cancel": "取消", "confirm": "确认", "fetchData": "获取数据" },
-  "query": { "uid": "UID", "dateRange": "时间段", "preset": { "7d": "最近7天", "30d": "最近30天", "3m": "最近3个月", "6m": "最近6个月", "1y": "最近1年", "all": "全部" } }
+  "query": {
+    "uid": "UID",
+    "dateRange": "时间段",
+    "sessdataWarning": "当前未配置 SESSDATA。你仍然可以查询，但无法获取完整内容：弹幕正文和字幕将缺失，相关词云和详情也会不完整。",
+    "preset": { "7d": "最近7天", "30d": "最近30天", "3m": "最近3个月", "6m": "最近6个月", "1y": "最近1年", "all": "全部" }
+  }
 }
