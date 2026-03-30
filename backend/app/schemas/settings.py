@@ -1,0 +1,15 @@
+from pydantic import BaseModel
+
+
+class SettingsResponse(BaseModel):
+    sessdata: str  # masked if set
+    ai_base_url: str
+    ai_api_key: str  # masked if set
+    ai_model: str
+
+
+class SettingsUpdate(BaseModel):
+    sessdata: str | None = None
+    ai_base_url: str | None = None
+    ai_api_key: str | None = None
+    ai_model: str | None = None
