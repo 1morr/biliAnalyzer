@@ -31,7 +31,7 @@ FastAPI Backend
     └── SQLAlchemy → SQLite
 ```
 
-Heavy operations (bulk video fetching, AI analysis) use FastAPI's `BackgroundTasks` for non-blocking execution.
+Heavy operations (bulk video fetching) run as background tasks using `asyncio.create_task` tracked by an in-memory job registry. AI analysis streams directly via SSE. Note: background tasks run in the same process — acceptable for a single-user/small-team tool. For production scale, upgrade to Celery + Redis.
 
 ## Data Model
 
@@ -49,6 +49,8 @@ Heavy operations (bulk video fetching, AI analysis) use FastAPI's `BackgroundTas
 | Column | Type | Description |
 |--------|------|-------------|
 | bvid | TEXT, PK | Bilibili BV ID |
+| aid | INTEGER | Bilibili AV ID (numeric, required for comments API) |
+| cid | INTEGER | Content/part ID (required for danmaku and subtitle APIs) |
 | uid | INTEGER, FK → User | Author UID |
 | title | TEXT | Video title |
 | description | TEXT | Video description |
@@ -96,21 +98,32 @@ Stores user query history.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER, PK | Auto-increment |
-| uid | INTEGER, FK → User | Queried user UID |
+| uid | INTEGER | Queried Bilibili user UID (stored directly, not FK — user record may not exist yet) |
+| user_name | TEXT | Cached username at query time |
 | start_date | DATE | Query start date |
 | end_date | DATE | Query end date |
+| status | TEXT | Query status: `pending`, `fetching`, `fetching_content`, `done`, `error` |
+| progress | TEXT | Progress info, e.g. "Fetching video 12/47" |
+| error_message | TEXT | Error details if status is `error` |
 | video_count | INTEGER | Number of videos found |
-| total_views | INTEGER | Aggregated views |
+| total_views | INTEGER | Aggregated total views |
+| total_likes | INTEGER | Aggregated total likes |
+| total_coins | INTEGER | Aggregated total coins |
+| total_favorites | INTEGER | Aggregated total favorites |
+| total_shares | INTEGER | Aggregated total shares |
+| total_danmaku | INTEGER | Aggregated total danmaku |
+| total_comments | INTEGER | Aggregated total comments |
 | created_at | DATETIME | Query creation time |
 
 ### AppSettings
 
-Key-value store for user configuration. Sensitive values (API key, SESSDATA) encrypted at rest.
+Key-value store for user configuration. Sensitive values (API key, SESSDATA) encrypted at rest using Fernet symmetric encryption (`cryptography` library). The encryption key is derived from a `SECRET_KEY` environment variable via PBKDF2. If `SECRET_KEY` is not set, a random key is generated on first run and stored in `./data/.secret_key` (excluded from version control).
 
 | Column | Type | Description |
 |--------|------|-------------|
 | key | TEXT, PK | Setting key |
-| value | TEXT | Setting value (encrypted for sensitive keys) |
+| value | TEXT | Setting value (Fernet-encrypted for keys: `ai_api_key`, `sessdata`) |
+| is_sensitive | BOOLEAN | Whether the value is encrypted |
 
 ## API Endpoints
 
@@ -118,17 +131,52 @@ Key-value store for user configuration. Sensitive values (API key, SESSDATA) enc
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/fetch` | Fetch videos for UID + time range from Bilibili. Creates a Query record. Returns query ID. |
+| POST | `/api/fetch` | Create a new query. Starts background data fetch. Returns query ID immediately. |
 | GET | `/api/queries` | List all query history (for sidebar). |
-| GET | `/api/queries/{id}` | Get query detail with video list. |
-| DELETE | `/api/queries/{id}` | Delete a query and its cached data. |
+| GET | `/api/queries/{id}` | Get query detail including status, progress, and video list. |
+| DELETE | `/api/queries/{id}` | Delete a query. Cascades: deletes associated VideoStats and VideoContent rows. Video records shared by other queries are retained; orphaned Video records are cleaned up. |
+
+**`POST /api/fetch` request body:**
+```json
+{
+  "uid": 546195,
+  "start_date": "2024-01-01",
+  "end_date": "2024-06-30"
+}
+```
+
+**`POST /api/fetch` response:**
+```json
+{
+  "query_id": 1,
+  "status": "pending"
+}
+```
+
+**Fetch workflow (background task):**
+1. Set query status to `fetching`. Fetch user info → create/update User record.
+2. Paginate through video list API, filter by date range, create Video records (with `aid`, `cid`), create VideoStats snapshots. Update `progress` field ("Fetching video 12/47").
+3. Set status to `fetching_content`. For each video, fetch comments (public). If SESSDATA is configured, fetch danmaku (XML parse) and subtitle (two-step: get subtitle URL from player API, then fetch JSON from CDN). Create VideoContent records.
+4. Compute aggregate stats, update Query totals. Set status to `done`.
+5. On any error: set status to `error`, store `error_message`.
 
 ### Videos
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/queries/{id}/videos` | List videos for a query. Supports `sort_by` (views, likes, coins, favorites, shares, danmaku, comments, published_at) and `order` (asc, desc). Paginated. |
+| GET | `/api/queries/{id}/videos` | List videos for a query. Supports `sort_by` (views, likes, coins, favorites, shares, danmaku, comments, published_at) and `order` (asc, desc). Paginated: `page` (default 1), `page_size` (default 20, max 100). |
 | GET | `/api/videos/{bvid}` | Single video detail with latest stats. |
+
+**Pagination response envelope:**
+```json
+{
+  "items": [...],
+  "total": 47,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 3
+}
+```
 
 ### Analytics
 
@@ -137,9 +185,11 @@ Key-value store for user configuration. Sensitive values (API key, SESSDATA) enc
 | GET | `/api/queries/{id}/stats/summary` | Aggregated stats for a query (total views, likes, etc.). |
 | GET | `/api/queries/{id}/stats/trend` | Views trend over time (grouped by day/week/month). |
 | GET | `/api/queries/{id}/stats/interaction` | Interaction comparison data (likes, coins, favorites, shares). |
-| GET | `/api/queries/{id}/wordcloud/{type}` | Word cloud image (PNG). Types: `title`, `tag`, `danmaku`, `comment`. |
-| GET | `/api/videos/{bvid}/stats/comparison` | Single video stats vs query average (for radar chart). |
-| GET | `/api/videos/{bvid}/wordcloud/{type}` | Single video word cloud. Types: `content` (title + tags + subtitle combined), `interaction` (danmaku + comments combined). |
+| GET | `/api/queries/{id}/wordcloud/{type}` | Word cloud image (PNG). Types: `title`, `tag`, `danmaku`, `comment`. Generated on first request, cached to `./data/wordclouds/{query_id}_{type}.png`. Cache invalidated if query data is re-fetched. |
+| GET | `/api/videos/{bvid}/stats/comparison` | Single video stats vs query average (for radar chart). Requires `query_id` query param for context. |
+| GET | `/api/videos/{bvid}/wordcloud/{type}` | Single video word cloud. Types: `content` (title + tags + subtitle combined), `interaction` (danmaku + comments combined). Cached to `./data/wordclouds/{bvid}_{type}.png`. |
+
+**Interaction Rate formula:** `(likes + coins + favorites + shares) / views * 100`. Computed in API response, not stored. Returned as a float percentage in video detail and stats endpoints.
 
 ### AI Analysis
 
@@ -151,8 +201,8 @@ Key-value store for user configuration. Sensitive values (API key, SESSDATA) enc
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/settings` | Get all settings (sensitive values masked). |
-| PUT | `/api/settings` | Update settings. |
+| GET | `/api/settings` | Get all settings. Sensitive values returned as masked strings (`"***"`). |
+| PUT | `/api/settings` | Update settings. Backend detects masked placeholder values (`"***"`) and skips those keys — only non-masked values are updated. Supports partial updates. |
 | POST | `/api/settings/test-ai` | Test AI connection. |
 
 ## Frontend Pages
@@ -262,20 +312,39 @@ Modal triggered by "+ New Query" button.
 
 ## Bilibili API Integration
 
-**Public endpoints (no auth):**
-- User info: `https://api.bilibili.com/x/space/wbi/acc/info?mid={uid}`
-- Video list: `https://api.bilibili.com/x/space/wbi/arc/search?mid={uid}&ps=50&pn={page}`
-- Video stats: `https://api.bilibili.com/x/web-interface/view?bvid={bvid}`
+### WBI Signature (Required)
+
+Bilibili's WBI-signed endpoints require a signature computed from `img_key` and `sub_key`. The flow:
+1. Fetch `https://api.bilibili.com/x/web-interface/nav` to get `wbi_img.img_url` and `wbi_img.sub_url`.
+2. Extract `img_key` and `sub_key` from the URLs (filename without extension).
+3. For each WBI request: sort query params, append `wts` (current timestamp), compute `w_rid = MD5(encoded_params + mixin_key)`, append both to the request.
+4. Cache `img_key`/`sub_key` for the session (they rotate infrequently).
+
+Implementation reference: the bilibili-API-collect community docs.
+
+### Public endpoints (no auth, WBI-signed where noted)
+
+- User info: `https://api.bilibili.com/x/space/wbi/acc/info?mid={uid}` (WBI signed)
+- Video list: `https://api.bilibili.com/x/space/wbi/arc/search?mid={uid}&ps=50&pn={page}` (WBI signed)
+- Video detail (stats + cid + aid): `https://api.bilibili.com/x/web-interface/view?bvid={bvid}` (no WBI)
 - Tags: included in video detail response
-- Comments: `https://api.bilibili.com/x/v2/reply?type=1&oid={aid}&pn={page}`
+- Comments: `https://api.bilibili.com/x/v2/reply?type=1&oid={aid}&pn={page}` (no WBI, uses `aid` numeric ID)
 
-**Authenticated endpoints (require SESSDATA cookie):**
-- Danmaku: `https://api.bilibili.com/x/v1/dm/list.so?oid={cid}` (XML format)
-- Subtitle: `https://api.bilibili.com/x/player/v2?bvid={bvid}&cid={cid}` (returns subtitle URL)
+### Authenticated endpoints (require SESSDATA cookie)
 
-**Graceful degradation:** When SESSDATA is not configured, danmaku and subtitle features show a notice prompting the user to add SESSDATA in settings. All other features work normally.
+- Danmaku: `https://comment.bilibili.com/{cid}.xml` (returns XML, parse to extract danmaku text)
+- Danmaku (alternative, protobuf): `https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid={cid}&segment_index={n}` (paginated segments)
+- Subtitle: Two-step process:
+  1. `https://api.bilibili.com/x/player/v2?bvid={bvid}&cid={cid}` → response contains `subtitle.subtitles[].subtitle_url`
+  2. Fetch the `subtitle_url` (CDN JSON) → extract text from `body[].content`
 
-**Rate limiting:** Backend implements request throttling (1 request/second to Bilibili API) to avoid being blocked. Bulk fetches use sequential requests with delays.
+### Graceful degradation
+
+When SESSDATA is not configured, danmaku and subtitle features show a notice prompting the user to add SESSDATA in settings. Word clouds that depend on danmaku/subtitle data display a placeholder. All other features work normally.
+
+### Rate limiting
+
+Backend implements request throttling (1 request/second to Bilibili API) to avoid being blocked. Bulk fetches use sequential requests with delays. An async semaphore limits concurrency to 1 Bilibili request at a time.
 
 ## AI Analysis
 
@@ -287,19 +356,26 @@ Modal triggered by "+ New Query" button.
 
 **Language:** AI prompt adapts to the user's selected language (zh/en).
 
+**Scope:** AI analysis is query-level only (analyzes all videos in a query). There is no per-video AI analysis — the Video Detail page provides statistical comparisons (radar chart, vs-average bars) which are sufficient for individual video insights without AI cost.
+
 ## Internationalization
 
 Two locales: `zh` (Chinese, default) and `en` (English).
 
-Translation files in `frontend/src/i18n/locales/{zh,en}.json`. All user-facing strings externalized. Language preference stored in AppSettings and localStorage.
+Translation files in `frontend/src/i18n/locales/{zh,en}.json`. All user-facing strings externalized. Language preference stored in `localStorage` only (no server-side storage needed — the frontend is the sole consumer).
 
-Backend error messages also support i18n via Accept-Language header.
+Backend error messages support i18n via `Accept-Language` header sent by the frontend.
 
 ## Dark/Light Mode
 
-Implemented via Shadcn/Tailwind CSS dark mode (`class` strategy). Three options: light, dark, system. Preference stored in localStorage and AppSettings.
+Implemented via Shadcn/Tailwind CSS dark mode (`class` strategy). Three options: light, dark, system. Preference stored in `localStorage` only.
 
 ECharts theme switches between light and dark chart themes.
+
+## CORS Configuration
+
+- **Development**: FastAPI CORS middleware allows `http://localhost:5173` (Vite dev server). Configured via `CORS_ORIGINS` environment variable.
+- **Production (Docker)**: Nginx proxies `/api/*` to backend on the same origin — no CORS needed. `CORS_ORIGINS` defaults to empty (disabled).
 
 ## Docker Deployment
 
@@ -326,7 +402,19 @@ services:
 
 **Backend Dockerfile:** Python 3.11 slim image. Installs dependencies, runs Uvicorn.
 
-**Volumes:** `./data` directory persists SQLite database, generated word cloud images, and any cached data across container restarts.
+**Volumes:** `./data` directory persists SQLite database, generated word cloud images, encryption key, and any cached data across container restarts.
+
+**Environment variables (`.env.example`):**
+```bash
+# Required
+DATABASE_URL=sqlite+aiosqlite:///./data/bilianalyzer.db
+
+# Optional — encryption key for sensitive settings. If not set, auto-generated and stored in ./data/.secret_key
+SECRET_KEY=
+
+# Optional — CORS origins for development (comma-separated). Empty = disabled.
+CORS_ORIGINS=http://localhost:5173
+```
 
 ## Project Structure
 
