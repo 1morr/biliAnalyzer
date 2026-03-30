@@ -31,3 +31,25 @@ class VideoComparison(BaseModel):
     average_values: list[float]
     percentage_diff: list[float]
     max_values: list[float]  # Global max for each metric across all videos in query
+
+
+class WordFrequencyItem(BaseModel):
+    name: str
+    value: int
+
+
+class WordFrequencyResponse(BaseModel):
+    words: list[WordFrequencyItem]
+
+
+class WordContextVideo(BaseModel):
+    bvid: str
+    title: str
+    count: int
+    snippets: list[str]
+
+
+class WordDetailResponse(BaseModel):
+    word: str
+    total_count: int
+    videos: list[WordContextVideo]

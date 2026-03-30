@@ -52,3 +52,25 @@ export interface SettingsResponse {
   sessdata: string; ai_base_url: string;
   ai_api_key: string; ai_model: string;
 }
+
+export interface WordFrequencyItem {
+  name: string;
+  value: number;
+}
+
+export interface WordFrequencyResponse {
+  words: WordFrequencyItem[];
+}
+
+export interface WordContextVideo {
+  bvid: string;
+  title: string;
+  count: number;
+  snippets: string[];
+}
+
+export interface WordDetailResponse {
+  word: string;
+  total_count: number;
+  videos: WordContextVideo[];
+}

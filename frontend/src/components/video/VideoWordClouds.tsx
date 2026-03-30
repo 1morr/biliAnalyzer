@@ -1,48 +1,75 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import type { WordFrequencyItem, WordDetailResponse } from "@/types";
+import WordCloudChart from "@/components/shared/WordCloudChart";
+import WordDetailPanel from "@/components/shared/WordDetailPanel";
 
 interface VideoWordCloudsProps {
   bvid: string;
 }
 
-function CloudImage({ src, label }: { src: string; label: string }) {
+type VideoCloudType = "content" | "interaction";
+
+interface CloudDef {
+  type: VideoCloudType;
+  labelKey: string;
+}
+
+const CLOUDS: CloudDef[] = [
+  { type: "content", labelKey: "chart.wordcloud.content" },
+  { type: "interaction", labelKey: "chart.wordcloud.interaction" },
+];
+
+function CloudPanel({ bvid, type, labelKey }: { bvid: string; type: VideoCloudType; labelKey: string }) {
   const { t } = useTranslation();
-  const [failed, setFailed] = useState(false);
+  const [words, setWords] = useState<WordFrequencyItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api.getVideoWordFrequency(bvid, type)
+      .then((d) => { if (active) setWords(d.words); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [bvid, type]);
+
+  const handleWordClick = useCallback((word: string) => {
+    setSelectedWord(word);
+    setDetailOpen(true);
+  }, []);
+
+  const fetchDetail = useCallback(
+    (w: string): Promise<WordDetailResponse> => api.getVideoWordDetail(bvid, type, w),
+    [bvid, type],
+  );
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      {failed ? (
-        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-xs text-muted-foreground">
-          {t("common.noData")}
-        </div>
-      ) : (
-        <img
-          src={src}
-          alt={label}
-          className="h-40 w-full rounded-lg object-contain border border-border bg-white"
-          onError={() => setFailed(true)}
-        />
-      )}
+      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
+      <WordCloudChart words={words} loading={loading} onWordClick={handleWordClick} height={160} />
+      <WordDetailPanel
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        word={selectedWord}
+        fetchDetail={fetchDetail}
+        showVideoBreakdown={false}
+      />
     </div>
   );
 }
 
 export default function VideoWordClouds({ bvid }: VideoWordCloudsProps) {
-  const { t } = useTranslation();
-
   return (
     <div>
       <div className="grid grid-cols-2 gap-3">
-        <CloudImage
-          src={api.videoWordcloudUrl(bvid, "content")}
-          label={t("chart.wordcloud.content")}
-        />
-        <CloudImage
-          src={api.videoWordcloudUrl(bvid, "interaction")}
-          label={t("chart.wordcloud.interaction")}
-        />
+        {CLOUDS.map(({ type, labelKey }) => (
+          <CloudPanel key={type} bvid={bvid} type={type} labelKey={labelKey} />
+        ))}
       </div>
     </div>
   );

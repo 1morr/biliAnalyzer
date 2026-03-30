@@ -9,7 +9,6 @@ from app.core.database import init_db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
-    Path(settings.DATA_DIR, "wordclouds").mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 

@@ -1,4 +1,4 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -33,7 +33,13 @@ export const api = {
   updateSettings: (data: Partial<SettingsResponse>) =>
     request<SettingsResponse>("/settings", { method: "PUT", body: JSON.stringify(data) }),
   testAi: () => request<{ status: string; message?: string }>("/settings/test-ai", { method: "POST" }),
-  wordcloudUrl: (queryId: number, type: string) => `${BASE}/queries/${queryId}/wordcloud/${type}`,
-  videoWordcloudUrl: (bvid: string, type: string) => `${BASE}/videos/${bvid}/wordcloud/${type}`,
+  getWordFrequency: (queryId: number, type: string) =>
+    request<WordFrequencyResponse>(`/queries/${queryId}/wordcloud/${type}`),
+  getVideoWordFrequency: (bvid: string, type: string) =>
+    request<WordFrequencyResponse>(`/videos/${bvid}/wordcloud/${type}`),
+  getWordDetail: (queryId: number, type: string, word: string) =>
+    request<WordDetailResponse>(`/queries/${queryId}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}`),
+  getVideoWordDetail: (bvid: string, type: string, word: string) =>
+    request<WordDetailResponse>(`/videos/${bvid}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}`),
   aiAnalyzeUrl: (queryId: number) => `${BASE}/queries/${queryId}/ai/analyze`,
 };

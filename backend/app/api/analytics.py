@@ -1,15 +1,15 @@
 import json
 from collections import defaultdict
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
-from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import Query, QueryVideo, Video, VideoStats, VideoContent
-from app.schemas.analytics import StatsSummary, TrendPoint, InteractionData, VideoComparison
-from app.services.wordcloud_svc import generate_wordcloud
-from app.core.config import settings as app_settings
+from app.schemas.analytics import (
+    StatsSummary, TrendPoint, InteractionData, VideoComparison,
+    WordFrequencyResponse, WordDetailResponse,
+)
+from app.services.wordcloud_svc import compute_word_frequencies, extract_word_contexts
 
 router = APIRouter()
 
@@ -114,16 +114,11 @@ QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment"}
 VIDEO_WC_TYPES = {"content", "interaction"}
 
 
-@router.get("/queries/{query_id}/wordcloud/{wc_type}")
+@router.get("/queries/{query_id}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
 async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depends(get_db)):
     if wc_type not in QUERY_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
-    cache_path = Path(app_settings.DATA_DIR) / "wordclouds" / f"{query_id}_{wc_type}.png"
-    if cache_path.exists():
-        return FileResponse(cache_path, media_type="image/png")
-
-    # Gather texts
     result = await db.execute(
         select(Video, VideoContent)
         .join(QueryVideo, QueryVideo.bvid == Video.bvid)
@@ -132,34 +127,46 @@ async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depend
     )
     rows = result.all()
 
-    texts = []
-    for video, content in rows:
-        if wc_type == "title":
-            texts.append(video.title or "")
-        elif wc_type == "tag":
-            texts.extend((video.tags or "").split(","))
-        elif wc_type == "danmaku" and content and content.danmakus:
-            texts.extend(json.loads(content.danmakus))
-        elif wc_type == "comment" and content and content.comments:
-            texts.extend(json.loads(content.comments))
-
+    texts = _gather_query_texts(rows, wc_type)
     if not texts:
         raise HTTPException(status_code=404, detail="No data available for word cloud")
 
-    output = generate_wordcloud(texts, str(cache_path))
-    if not output:
+    words = compute_word_frequencies(texts)
+    if not words:
         raise HTTPException(status_code=404, detail="Not enough text data")
-    return FileResponse(cache_path, media_type="image/png")
+    return WordFrequencyResponse(words=words)
 
 
-@router.get("/videos/{bvid}/wordcloud/{wc_type}")
+@router.get("/queries/{query_id}/wordcloud/{wc_type}/detail", response_model=WordDetailResponse)
+async def query_wordcloud_detail(
+    query_id: int, wc_type: str,
+    word: str = QueryParam(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if wc_type not in QUERY_WC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
+
+    result = await db.execute(
+        select(Video, VideoContent)
+        .join(QueryVideo, QueryVideo.bvid == Video.bvid)
+        .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
+        .where(QueryVideo.query_id == query_id)
+    )
+    rows = result.all()
+
+    annotated = _gather_query_annotated_texts(rows, wc_type)
+    if not annotated:
+        raise HTTPException(status_code=404, detail="No data available")
+
+    videos = extract_word_contexts(annotated, word)
+    total_count = sum(v["count"] for v in videos)
+    return WordDetailResponse(word=word, total_count=total_count, videos=videos)
+
+
+@router.get("/videos/{bvid}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
 async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(get_db)):
     if wc_type not in VIDEO_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {VIDEO_WC_TYPES}")
-
-    cache_path = Path(app_settings.DATA_DIR) / "wordclouds" / f"{bvid}_{wc_type}.png"
-    if cache_path.exists():
-        return FileResponse(cache_path, media_type="image/png")
 
     video = await db.get(Video, bvid)
     if not video:
@@ -170,6 +177,97 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
     )
     content = content_result.scalar_one_or_none()
 
+    texts = _gather_video_texts(video, content, wc_type)
+    if not texts:
+        raise HTTPException(status_code=404, detail="No data available")
+
+    words = compute_word_frequencies(texts)
+    if not words:
+        raise HTTPException(status_code=404, detail="Not enough text data")
+    return WordFrequencyResponse(words=words)
+
+
+@router.get("/videos/{bvid}/wordcloud/{wc_type}/detail", response_model=WordDetailResponse)
+async def video_wordcloud_detail(
+    bvid: str, wc_type: str,
+    word: str = QueryParam(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if wc_type not in VIDEO_WC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {VIDEO_WC_TYPES}")
+
+    video = await db.get(Video, bvid)
+    if not video:
+        raise HTTPException(status_code=404)
+
+    content_result = await db.execute(
+        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
+    )
+    content = content_result.scalar_one_or_none()
+
+    texts = _gather_video_texts(video, content, wc_type)
+    if not texts:
+        raise HTTPException(status_code=404, detail="No data available")
+
+    annotated = [(bvid, video.title or bvid, t) for t in texts]
+    videos = extract_word_contexts(annotated, word)
+    total_count = sum(v["count"] for v in videos)
+    return WordDetailResponse(word=word, total_count=total_count, videos=videos)
+
+
+def _safe_json_loads(raw: str) -> list[str]:
+    """Safely parse a JSON string array, returning empty list on failure."""
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def _gather_query_texts(rows: list, wc_type: str) -> list[str]:
+    """Gather flat text list from query video rows."""
+    texts = []
+    seen_bvids: set[str] = set()
+    for video, content in rows:
+        if video.bvid in seen_bvids:
+            continue
+        seen_bvids.add(video.bvid)
+        if wc_type == "title":
+            texts.append(video.title or "")
+        elif wc_type == "tag":
+            texts.extend((video.tags or "").split(","))
+        elif wc_type == "danmaku" and content and content.danmakus:
+            texts.extend(_safe_json_loads(content.danmakus))
+        elif wc_type == "comment" and content and content.comments:
+            texts.extend(_safe_json_loads(content.comments))
+    return texts
+
+
+def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple[str, str, str]]:
+    """Gather (bvid, title, text) tuples preserving per-video grouping."""
+    annotated: list[tuple[str, str, str]] = []
+    seen_bvids: set[str] = set()
+    for video, content in rows:
+        if video.bvid in seen_bvids:
+            continue
+        seen_bvids.add(video.bvid)
+        bvid = video.bvid
+        title = video.title or bvid
+        if wc_type == "title":
+            annotated.append((bvid, title, video.title or ""))
+        elif wc_type == "tag":
+            annotated.append((bvid, title, (video.tags or "").replace(",", " ")))
+        elif wc_type == "danmaku" and content and content.danmakus:
+            for text in _safe_json_loads(content.danmakus):
+                annotated.append((bvid, title, text))
+        elif wc_type == "comment" and content and content.comments:
+            for text in _safe_json_loads(content.comments):
+                annotated.append((bvid, title, text))
+    return annotated
+
+
+def _gather_video_texts(video: Video, content: VideoContent | None, wc_type: str) -> list[str]:
+    """Gather flat text list from a single video."""
     texts = []
     if wc_type == "content":
         texts.append(video.title or "")
@@ -179,14 +277,7 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
     elif wc_type == "interaction":
         if content:
             if content.danmakus:
-                texts.extend(json.loads(content.danmakus))
+                texts.extend(_safe_json_loads(content.danmakus))
             if content.comments:
-                texts.extend(json.loads(content.comments))
-
-    if not texts:
-        raise HTTPException(status_code=404, detail="No data available")
-
-    output = generate_wordcloud(texts, str(cache_path))
-    if not output:
-        raise HTTPException(status_code=404, detail="Not enough text data")
-    return FileResponse(cache_path, media_type="image/png")
+                texts.extend(_safe_json_loads(content.comments))
+    return texts

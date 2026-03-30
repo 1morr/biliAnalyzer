@@ -1,52 +1,84 @@
 # backend/app/services/wordcloud_svc.py
 import json
-from pathlib import Path
+import re
+from collections import Counter
 import jieba
-from wordcloud import WordCloud
-from app.core.config import settings
 
-# Common Chinese stop words
-STOP_WORDS = set("的了是在不有和人这中大为上个国我以要他时来用们生到作地于出会s可也你对就里如被从之好最所然机与知道说本长看那但c下自现前工么都很种多将学实手世美行无才同得当已最先过身什将而做家所开意把让面公关新但已等能没理事全体之大无才多想电长民接把关正在我们".split())
-STOP_WORDS.update({"", " ", "\n", "\t", "哈哈", "啊", "了", "的", "是"})
+# Common Chinese stop words (single characters iterated from string + multi-char words)
+STOP_WORDS = set("的了是在不有和人这中大为上个国我以要他时来用们生到作地于出会可也你对就里如被从之好最所然机与说本长看那但下自现前工么都很种多将学实手世美行无才同得当已先过身什而做家所开意把让面公关新等能没理事全体想电民接正")
+STOP_WORDS.update({"知道", "我们", "可以", "这个", "什么", "没有", "就是", "一个", "不是", "因为", "所以", "如果", "已经", "还是"})
+STOP_WORDS.update({"", " ", "\n", "\t", "哈哈", "啊", "了", "的", "是", "s", "c"})
 
 
-def generate_wordcloud(texts: list[str], output_path: str, width: int = 800, height: int = 400) -> str:
-    """Generate word cloud from texts, save as PNG, return file path."""
+def compute_word_frequencies(texts: list[str], limit: int = 100) -> list[dict]:
+    """Tokenize texts with jieba, count word frequencies, return top N."""
     combined = " ".join(texts)
     if not combined.strip():
-        return ""
+        return []
 
     words = jieba.cut(combined)
     filtered = [w for w in words if len(w) > 1 and w not in STOP_WORDS]
-    text = " ".join(filtered)
 
-    if not text.strip():
-        return ""
+    if not filtered:
+        return []
 
-    wc = WordCloud(
-        width=width, height=height,
-        background_color="white",
-        font_path=_find_cjk_font(),
-        max_words=100,
-        collocations=False,
-    )
-    wc.generate(text)
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    wc.to_file(output_path)
-    return output_path
+    counter = Counter(filtered)
+    return [{"name": word, "value": count} for word, count in counter.most_common(limit)]
 
 
-def _find_cjk_font() -> str | None:
-    """Find a CJK font on the system for word cloud rendering."""
-    candidates = [
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",  # Linux
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux
-        "C:/Windows/Fonts/msyh.ttc",  # Windows (Microsoft YaHei)
-        "C:/Windows/Fonts/simhei.ttf",  # Windows (SimHei)
-        "/System/Library/Fonts/PingFang.ttc",  # macOS
-    ]
-    for path in candidates:
-        if Path(path).exists():
-            return path
-    return None
+def extract_word_contexts(
+    texts: list[tuple[str, str, str]],
+    word: str,
+    max_snippets: int = 10,
+) -> list[dict]:
+    """Extract context snippets for a word from annotated texts.
+
+    Args:
+        texts: list of (bvid, title, raw_text) tuples
+        word: the target word to find contexts for
+        max_snippets: max total snippets to return across all videos
+
+    Returns:
+        list of {"bvid", "title", "count", "snippets"} dicts grouped by video
+    """
+    results: dict[str, dict] = {}
+    total_snippets = 0
+
+    for bvid, title, raw_text in texts:
+        if not raw_text:
+            continue
+
+        # Count occurrences of the word in segmented text
+        segmented = list(jieba.cut(raw_text))
+        count = sum(1 for w in segmented if w == word)
+        if count == 0:
+            continue
+
+        # Extract surrounding context snippets from the raw text
+        snippets: list[str] = []
+        if total_snippets < max_snippets:
+            for match in re.finditer(re.escape(word), raw_text):
+                if total_snippets >= max_snippets:
+                    break
+                start = max(0, match.start() - 20)
+                end = min(len(raw_text), match.end() + 20)
+                snippet = raw_text[start:end].strip()
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(raw_text):
+                    snippet = snippet + "..."
+                snippets.append(snippet)
+                total_snippets += 1
+
+        if bvid in results:
+            results[bvid]["count"] += count
+            results[bvid]["snippets"].extend(snippets)
+        else:
+            results[bvid] = {
+                "bvid": bvid,
+                "title": title,
+                "count": count,
+                "snippets": snippets,
+            }
+
+    return sorted(results.values(), key=lambda x: x["count"], reverse=True)

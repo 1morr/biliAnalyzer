@@ -8,7 +8,7 @@
   },
   "chart": {
     "viewsTrend": "播放量趋势", "interaction": "互动数据对比",
-    "scatter": "播放量 vs 互动率", "scatterFormula": "互动率 = (点赞 + 投币 + 收藏 + 分享) / 播放量 × 100%", "wordcloud": { "title": "标题词云", "tag": "标签词云", "danmaku": "弹幕词云", "comment": "评论词云", "content": "内容词云", "interaction": "互动词云" }
+    "scatter": "播放量 vs 互动率", "scatterFormula": "互动率 = (点赞 + 投币 + 收藏 + 分享) / 播放量 × 100%", "wordcloud": { "title": "标题词云", "tag": "标签词云", "danmaku": "弹幕词云", "comment": "评论词云", "content": "内容词云", "interaction": "互动词云", "detail": "词语详情", "frequency": "出现频次", "perVideo": "视频分布", "contexts": "上下文片段", "occurrences": "出现 {{count}} 次", "inVideos": "出现在 {{count}} 个视频中" }
   },
   "video": {
     "list": "视频列表", "detail": "视频详情", "sort": "排序",
