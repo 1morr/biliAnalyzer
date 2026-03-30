@@ -62,11 +62,17 @@ export interface WordFrequencyResponse {
   words: WordFrequencyItem[];
 }
 
+export interface SnippetItem {
+  text: string;
+  user: string | null;
+  source: string | null; // "danmaku" | "comment" | null
+}
+
 export interface WordContextVideo {
   bvid: string;
   title: string;
   count: number;
-  snippets: string[];
+  snippets: SnippetItem[];
 }
 
 export interface WordDetailResponse {

@@ -9,7 +9,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import type { WordDetailResponse } from "@/types";
+import type { WordDetailResponse, SnippetItem } from "@/types";
 
 interface WordDetailPanelProps {
   open: boolean;
@@ -121,17 +121,29 @@ export default function WordDetailPanel({
                   </h3>
                   <ul className="space-y-2">
                     {data.videos.flatMap((v) =>
-                      v.snippets.map((snippet, i) => (
+                      v.snippets.map((snippet: SnippetItem, i: number) => (
                         <li
                           key={`${v.bvid}-${i}`}
                           className="rounded-md bg-muted/50 px-3 py-2 text-xs leading-relaxed text-foreground"
                         >
-                          {highlightWord(snippet, word!)}
-                          {showVideoBreakdown && data.videos.length > 1 && (
-                            <span className="block mt-1 text-[10px] text-muted-foreground truncate">
-                              — {v.title}
-                            </span>
-                          )}
+                          {highlightWord(snippet.text, word!)}
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            {snippet.user && (
+                              <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                                @{snippet.user}
+                              </span>
+                            )}
+                            {snippet.source && (
+                              <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
+                                {t(`chart.wordcloud.source.${snippet.source}`)}
+                              </span>
+                            )}
+                            {showVideoBreakdown && data.videos.length > 1 && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                — {v.title}
+                              </span>
+                            )}
+                          </div>
                         </li>
                       )),
                     )}

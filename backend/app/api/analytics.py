@@ -9,7 +9,10 @@ from app.schemas.analytics import (
     StatsSummary, TrendPoint, InteractionData, VideoComparison,
     WordFrequencyResponse, WordDetailResponse,
 )
-from app.services.wordcloud_svc import compute_word_frequencies, extract_word_contexts
+from app.services.wordcloud_svc import (
+    compute_word_frequencies, compute_user_frequencies,
+    extract_word_contexts, extract_user_comments, normalize_items,
+)
 
 router = APIRouter()
 
@@ -110,8 +113,8 @@ async def video_comparison(
     )
 
 
-QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment"}
-VIDEO_WC_TYPES = {"content", "interaction"}
+QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment", "user"}
+VIDEO_WC_TYPES = {"content", "interaction", "user"}
 
 
 @router.get("/queries/{query_id}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
@@ -119,21 +122,19 @@ async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depend
     if wc_type not in QUERY_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
-    result = await db.execute(
-        select(Video, VideoContent)
-        .join(QueryVideo, QueryVideo.bvid == Video.bvid)
-        .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
-        .where(QueryVideo.query_id == query_id)
-    )
-    rows = result.all()
+    rows = await _query_video_content_rows(db, query_id)
 
-    texts = _gather_query_texts(rows, wc_type)
-    if not texts:
-        raise HTTPException(status_code=404, detail="No data available for word cloud")
+    if wc_type == "user":
+        items = _gather_query_normalized_items(rows, "comment")
+        words = compute_user_frequencies(items)
+    else:
+        texts = _gather_query_texts(rows, wc_type)
+        if not texts:
+            raise HTTPException(status_code=404, detail="No data available for word cloud")
+        words = compute_word_frequencies(texts)
 
-    words = compute_word_frequencies(texts)
     if not words:
-        raise HTTPException(status_code=404, detail="Not enough text data")
+        raise HTTPException(status_code=404, detail="Not enough data")
     return WordFrequencyResponse(words=words)
 
 
@@ -146,19 +147,15 @@ async def query_wordcloud_detail(
     if wc_type not in QUERY_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
-    result = await db.execute(
-        select(Video, VideoContent)
-        .join(QueryVideo, QueryVideo.bvid == Video.bvid)
-        .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
-        .where(QueryVideo.query_id == query_id)
-    )
-    rows = result.all()
+    rows = await _query_video_content_rows(db, query_id)
 
-    annotated = _gather_query_annotated_texts(rows, wc_type)
-    if not annotated:
-        raise HTTPException(status_code=404, detail="No data available")
+    if wc_type == "user":
+        annotated = _gather_query_annotated_texts(rows, "comment")
+        videos = extract_user_comments(annotated, word)
+    else:
+        annotated = _gather_query_annotated_texts(rows, wc_type)
+        videos = extract_word_contexts(annotated, word)
 
-    videos = extract_word_contexts(annotated, word)
     total_count = sum(v["count"] for v in videos)
     return WordDetailResponse(word=word, total_count=total_count, videos=videos)
 
@@ -172,18 +169,19 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
     if not video:
         raise HTTPException(status_code=404)
 
-    content_result = await db.execute(
-        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
-    )
-    content = content_result.scalar_one_or_none()
+    content = await _latest_video_content(db, bvid)
 
-    texts = _gather_video_texts(video, content, wc_type)
-    if not texts:
-        raise HTTPException(status_code=404, detail="No data available")
+    if wc_type == "user":
+        items = _gather_video_normalized_items(video, content)
+        words = compute_user_frequencies(items)
+    else:
+        texts = _gather_video_texts(video, content, wc_type)
+        if not texts:
+            raise HTTPException(status_code=404, detail="No data available")
+        words = compute_word_frequencies(texts)
 
-    words = compute_word_frequencies(texts)
     if not words:
-        raise HTTPException(status_code=404, detail="Not enough text data")
+        raise HTTPException(status_code=404, detail="Not enough data")
     return WordFrequencyResponse(words=words)
 
 
@@ -200,23 +198,49 @@ async def video_wordcloud_detail(
     if not video:
         raise HTTPException(status_code=404)
 
-    content_result = await db.execute(
-        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
-    )
-    content = content_result.scalar_one_or_none()
+    content = await _latest_video_content(db, bvid)
 
-    texts = _gather_video_texts(video, content, wc_type)
-    if not texts:
-        raise HTTPException(status_code=404, detail="No data available")
+    if wc_type == "user":
+        annotated = _gather_video_annotated_texts(video, content, "interaction")
+        videos = extract_user_comments(annotated, word)
+    else:
+        annotated = _gather_video_annotated_texts(video, content, wc_type)
+        videos = extract_word_contexts(annotated, word)
 
-    annotated = [(bvid, video.title or bvid, t) for t in texts]
-    videos = extract_word_contexts(annotated, word)
     total_count = sum(v["count"] for v in videos)
     return WordDetailResponse(word=word, total_count=total_count, videos=videos)
 
 
-def _safe_json_loads(raw: str) -> list[str]:
-    """Safely parse a JSON string array, returning empty list on failure."""
+# --- Helper functions ---
+
+async def _query_video_content_rows(db: AsyncSession, query_id: int) -> list:
+    """Fetch deduplicated (Video, VideoContent) rows for a query."""
+    result = await db.execute(
+        select(Video, VideoContent)
+        .join(QueryVideo, QueryVideo.bvid == Video.bvid)
+        .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
+        .where(QueryVideo.query_id == query_id)
+    )
+    rows = result.all()
+    # Deduplicate: keep first occurrence per bvid
+    seen: set[str] = set()
+    deduped = []
+    for video, content in rows:
+        if video.bvid not in seen:
+            seen.add(video.bvid)
+            deduped.append((video, content))
+    return deduped
+
+
+async def _latest_video_content(db: AsyncSession, bvid: str) -> VideoContent | None:
+    result = await db.execute(
+        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _safe_json_loads(raw: str) -> list:
+    """Safely parse a JSON array, returning empty list on failure."""
     try:
         data = json.loads(raw)
         return data if isinstance(data, list) else []
@@ -224,45 +248,56 @@ def _safe_json_loads(raw: str) -> list[str]:
         return []
 
 
+def _extract_texts_from_items(raw_items: list) -> list[str]:
+    """Extract plain text strings from items (handles both old and new format)."""
+    items = normalize_items(raw_items)
+    return [item["text"] for item in items if item["text"]]
+
+
 def _gather_query_texts(rows: list, wc_type: str) -> list[str]:
     """Gather flat text list from query video rows."""
     texts = []
-    seen_bvids: set[str] = set()
     for video, content in rows:
-        if video.bvid in seen_bvids:
-            continue
-        seen_bvids.add(video.bvid)
         if wc_type == "title":
             texts.append(video.title or "")
         elif wc_type == "tag":
             texts.extend((video.tags or "").split(","))
         elif wc_type == "danmaku" and content and content.danmakus:
-            texts.extend(_safe_json_loads(content.danmakus))
+            texts.extend(_extract_texts_from_items(_safe_json_loads(content.danmakus)))
         elif wc_type == "comment" and content and content.comments:
-            texts.extend(_safe_json_loads(content.comments))
+            texts.extend(_extract_texts_from_items(_safe_json_loads(content.comments)))
     return texts
 
 
-def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple[str, str, str]]:
-    """Gather (bvid, title, text) tuples preserving per-video grouping."""
-    annotated: list[tuple[str, str, str]] = []
-    seen_bvids: set[str] = set()
+def _gather_query_normalized_items(rows: list, source_type: str) -> list[dict]:
+    """Gather normalized [{"text", "user"}] items from query rows for a given source."""
+    all_items: list[dict] = []
     for video, content in rows:
-        if video.bvid in seen_bvids:
+        if not content:
             continue
-        seen_bvids.add(video.bvid)
+        if source_type == "comment" and content.comments:
+            all_items.extend(normalize_items(_safe_json_loads(content.comments)))
+        elif source_type == "danmaku" and content.danmakus:
+            all_items.extend(normalize_items(_safe_json_loads(content.danmakus)))
+    return all_items
+
+
+def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple]:
+    """Gather (bvid, title, text, user, source) tuples preserving per-item grouping."""
+    annotated: list[tuple] = []
+    for video, content in rows:
         bvid = video.bvid
         title = video.title or bvid
         if wc_type == "title":
-            annotated.append((bvid, title, video.title or ""))
+            annotated.append((bvid, title, video.title or "", None, None))
         elif wc_type == "tag":
-            annotated.append((bvid, title, (video.tags or "").replace(",", " ")))
+            annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, None))
         elif wc_type == "danmaku" and content and content.danmakus:
-            for text in _safe_json_loads(content.danmakus):
-                annotated.append((bvid, title, text))
+            for item in normalize_items(_safe_json_loads(content.danmakus)):
+                annotated.append((bvid, title, item["text"], item["user"], "danmaku"))
         elif wc_type == "comment" and content and content.comments:
-            for text in _safe_json_loads(content.comments):
-                annotated.append((bvid, title, text))
+            for item in normalize_items(_safe_json_loads(content.comments)):
+                annotated.append((bvid, title, item["text"], item["user"], "comment"))
     return annotated
 
 
@@ -277,7 +312,41 @@ def _gather_video_texts(video: Video, content: VideoContent | None, wc_type: str
     elif wc_type == "interaction":
         if content:
             if content.danmakus:
-                texts.extend(_safe_json_loads(content.danmakus))
+                texts.extend(_extract_texts_from_items(_safe_json_loads(content.danmakus)))
             if content.comments:
-                texts.extend(_safe_json_loads(content.comments))
+                texts.extend(_extract_texts_from_items(_safe_json_loads(content.comments)))
     return texts
+
+
+def _gather_video_normalized_items(video: Video, content: VideoContent | None) -> list[dict]:
+    """Gather all normalized comment+danmaku items for a video (for user frequency)."""
+    items: list[dict] = []
+    if content:
+        if content.comments:
+            items.extend(normalize_items(_safe_json_loads(content.comments)))
+        if content.danmakus:
+            items.extend(normalize_items(_safe_json_loads(content.danmakus)))
+    return items
+
+
+def _gather_video_annotated_texts(
+    video: Video, content: VideoContent | None, wc_type: str,
+) -> list[tuple]:
+    """Gather (bvid, title, text, user, source) tuples for a single video."""
+    annotated: list[tuple] = []
+    bvid = video.bvid
+    title = video.title or bvid
+    if wc_type == "content":
+        annotated.append((bvid, title, video.title or "", None, None))
+        annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, None))
+        if content and content.subtitle:
+            annotated.append((bvid, title, content.subtitle, None, None))
+    elif wc_type == "interaction":
+        if content:
+            if content.danmakus:
+                for item in normalize_items(_safe_json_loads(content.danmakus)):
+                    annotated.append((bvid, title, item["text"], item["user"], "danmaku"))
+            if content.comments:
+                for item in normalize_items(_safe_json_loads(content.comments)):
+                    annotated.append((bvid, title, item["text"], item["user"], "comment"))
+    return annotated

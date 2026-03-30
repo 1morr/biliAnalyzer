@@ -132,7 +132,7 @@ class BilibiliClient:
             },
         }
 
-    async def get_comments(self, aid: int, max_pages: int = 5) -> list[str]:
+    async def get_comments(self, aid: int, max_pages: int = 5) -> list[dict]:
         comments = []
         for page in range(1, max_pages + 1):
             data = await self._request(
@@ -142,7 +142,10 @@ class BilibiliClient:
             replies = data.get("data", {}).get("replies") or []
             if not replies:
                 break
-            comments.extend(r["content"]["message"] for r in replies)
+            comments.extend(
+                {"text": r["content"]["message"], "user": r.get("member", {}).get("uname", "")}
+                for r in replies
+            )
         return comments
 
     async def get_danmakus(self, cid: int) -> list[str]:

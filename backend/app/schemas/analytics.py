@@ -42,11 +42,17 @@ class WordFrequencyResponse(BaseModel):
     words: list[WordFrequencyItem]
 
 
+class SnippetItem(BaseModel):
+    text: str
+    user: str | None = None
+    source: str | None = None  # "danmaku" | "comment" | None
+
+
 class WordContextVideo(BaseModel):
     bvid: str
     title: str
     count: int
-    snippets: list[str]
+    snippets: list[SnippetItem]
 
 
 class WordDetailResponse(BaseModel):

@@ -9,7 +9,7 @@ interface VideoWordCloudsProps {
   bvid: string;
 }
 
-type VideoCloudType = "content" | "interaction";
+type VideoCloudType = "content" | "interaction" | "user";
 
 interface CloudDef {
   type: VideoCloudType;
@@ -19,6 +19,7 @@ interface CloudDef {
 const CLOUDS: CloudDef[] = [
   { type: "content", labelKey: "chart.wordcloud.content" },
   { type: "interaction", labelKey: "chart.wordcloud.interaction" },
+  { type: "user", labelKey: "chart.wordcloud.user" },
 ];
 
 function CloudPanel({ bvid, type, labelKey }: { bvid: string; type: VideoCloudType; labelKey: string }) {

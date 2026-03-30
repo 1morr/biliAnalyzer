@@ -9,7 +9,7 @@ interface WordCloudGridProps {
   queryId: number;
 }
 
-type WordCloudType = "title" | "tag" | "danmaku" | "comment";
+type WordCloudType = "title" | "tag" | "danmaku" | "comment" | "user";
 
 interface CloudDef {
   type: WordCloudType;
@@ -21,6 +21,7 @@ const CLOUDS: CloudDef[] = [
   { type: "tag", labelKey: "chart.wordcloud.tag" },
   { type: "danmaku", labelKey: "chart.wordcloud.danmaku" },
   { type: "comment", labelKey: "chart.wordcloud.comment" },
+  { type: "user", labelKey: "chart.wordcloud.user" },
 ];
 
 function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCloudType; labelKey: string }) {
