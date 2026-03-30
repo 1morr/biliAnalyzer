@@ -27,7 +27,7 @@ if settings.CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-# Routers will be added in subsequent tasks
-# from app.api import fetch, queries, videos, analytics, ai, settings as settings_api
-# app.include_router(fetch.router, prefix="/api")
-# ...
+from app.api import fetch, queries
+
+app.include_router(fetch.router, prefix="/api", tags=["fetch"])
+app.include_router(queries.router, prefix="/api", tags=["queries"])
