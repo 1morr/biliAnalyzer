@@ -46,13 +46,33 @@ async def stats_trend(query_id: int, db: AsyncSession = Depends(get_db)):
         if video.bvid not in latest or stats.fetched_at > latest[video.bvid][1].fetched_at:
             latest[video.bvid] = (video, stats)
 
-    monthly: dict[str, int] = defaultdict(int)
+    # Collect publish dates to determine time span
+    dates = [video.published_at for video, _ in latest.values() if video.published_at]
+    if not dates:
+        return []
+
+    min_date, max_date = min(dates), max(dates)
+    span_days = (max_date - min_date).days
+
+    # Auto-adaptive granularity
+    if span_days <= 31:
+        fmt = "%Y-%m-%d"       # daily
+    elif span_days <= 180:
+        fmt = "week"           # weekly (special handling below)
+    else:
+        fmt = "%Y-%m"          # monthly
+
+    bucket: dict[str, int] = defaultdict(int)
     for video, stats in latest.values():
         if video.published_at:
-            key = video.published_at.strftime("%Y-%m")
-            monthly[key] += stats.views
+            if fmt == "week":
+                iso = video.published_at.isocalendar()
+                key = f"{iso[0]}-W{iso[1]:02d}"
+            else:
+                key = video.published_at.strftime(fmt)
+            bucket[key] += stats.views
 
-    return [TrendPoint(date=k, views=v) for k, v in sorted(monthly.items())]
+    return [TrendPoint(date=k, views=v) for k, v in sorted(bucket.items())]
 
 
 @router.get("/queries/{query_id}/stats/interaction", response_model=InteractionData)
