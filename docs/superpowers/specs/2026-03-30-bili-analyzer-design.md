@@ -115,9 +115,25 @@ Stores user query history.
 | total_comments | INTEGER | Aggregated total comments |
 | created_at | DATETIME | Query creation time |
 
+### QueryVideo
+
+Join table linking queries to their videos. Enables cascade delete and multi-query video sharing.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER, PK | Auto-increment |
+| query_id | INTEGER, FK → Query | Query ID |
+| bvid | TEXT, FK → Video | Video BV ID |
+
+Unique constraint on `(query_id, bvid)`. When a query is deleted, its `QueryVideo` rows are deleted. A Video record is deleted only when no remaining `QueryVideo` rows reference it (orphan cleanup).
+
 ### AppSettings
 
-Key-value store for user configuration. Sensitive values (API key, SESSDATA) encrypted at rest using Fernet symmetric encryption (`cryptography` library). The encryption key is derived from a `SECRET_KEY` environment variable via PBKDF2. If `SECRET_KEY` is not set, a random key is generated on first run and stored in `./data/.secret_key` (excluded from version control).
+Key-value store for user configuration. Sensitive values (API key, SESSDATA) encrypted at rest using Fernet symmetric encryption (`cryptography` library). The encryption key is either:
+- Provided via `SECRET_KEY` environment variable (used directly as Fernet key, must be a valid 32-byte URL-safe base64 string), OR
+- Auto-generated on first run using `Fernet.generate_key()` and stored in `./data/.secret_key` (excluded from version control).
+
+No PBKDF2 derivation is needed — Fernet keys are used directly. This is simple and secure for a single-instance deployment.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -155,7 +171,7 @@ Key-value store for user configuration. Sensitive values (API key, SESSDATA) enc
 
 **Fetch workflow (background task):**
 1. Set query status to `fetching`. Fetch user info → create/update User record.
-2. Paginate through video list API, filter by date range, create Video records (with `aid`, `cid`), create VideoStats snapshots. Update `progress` field ("Fetching video 12/47").
+2. Paginate through video list API, filter by date range. For each video, call the video detail API (`/x/web-interface/view`) to get full metadata including `aid`, `cid`, tags, and stats. Create Video records, VideoStats snapshots, and QueryVideo associations. Update `progress` field ("Fetching video 12/47").
 3. Set status to `fetching_content`. For each video, fetch comments (public). If SESSDATA is configured, fetch danmaku (XML parse) and subtitle (two-step: get subtitle URL from player API, then fetch JSON from CDN). Create VideoContent records.
 4. Compute aggregate stats, update Query totals. Set status to `done`.
 5. On any error: set status to `error`, store `error_message`.
@@ -409,7 +425,7 @@ services:
 # Required
 DATABASE_URL=sqlite+aiosqlite:///./data/bilianalyzer.db
 
-# Optional — encryption key for sensitive settings. If not set, auto-generated and stored in ./data/.secret_key
+# Optional — Fernet encryption key (32-byte URL-safe base64). If not set, auto-generated and stored in ./data/.secret_key
 SECRET_KEY=
 
 # Optional — CORS origins for development (comma-separated). Empty = disabled.
