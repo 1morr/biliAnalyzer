@@ -61,12 +61,14 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             await db.commit()
 
             # Step 3: Fetch details for each video
+            subtitle_flags = {}  # bvid -> bool, from /view API's subtitle.list
             for i, v in enumerate(all_videos, 1):
                 query.progress = f"Fetching video {i}/{total}"
                 await db.commit()
 
                 bvid = v["bvid"]
                 detail = await client.get_video_detail(bvid)
+                subtitle_flags[bvid] = detail.get("has_subtitle", False)
 
                 # Upsert Video
                 existing = await db.get(Video, bvid)
@@ -115,7 +117,12 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
 
                 comments = await client.get_comments(aid) if aid else []
                 danmakus = await client.get_danmakus(cid) if cid else []
-                subtitle = await client.get_subtitle(bvid, aid, cid) if (aid and cid) else ""
+                # Only fetch subtitle if /view API confirmed the video has one;
+                # player/v2 has a known bug where it returns random other videos' subtitles
+                has_sub = subtitle_flags.get(bvid, False)
+                subtitle = ""
+                if has_sub and aid and cid:
+                    subtitle = await client.get_subtitle(bvid, aid, cid)
 
                 db.add(VideoContent(
                     bvid=bvid,

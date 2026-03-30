@@ -257,9 +257,12 @@ class BilibiliClient:
             pass
         pages = d.get("pages") or []
         page_cids = [{"page": p["page"], "cid": p["cid"], "part": p.get("part", "")} for p in pages]
+        subtitle_list = d.get("subtitle", {}).get("list") or []
+        has_subtitle = len(subtitle_list) > 0
         return {
             "bvid": d["bvid"], "aid": d["aid"], "cid": d["cid"],
             "page_cids": page_cids,
+            "has_subtitle": has_subtitle,
             "title": d["title"], "description": d.get("desc", ""),
             "cover_url": d["pic"], "duration": d["duration"],
             "published_at": d["pubdate"],
@@ -301,8 +304,9 @@ class BilibiliClient:
         if not self._sessdata:
             return ""
         data = await self._request(
-            f"{self.BASE}/x/player/v2",
-            params={"aid": aid, "bvid": bvid, "cid": cid}
+            f"{self.BASE}/x/player/wbi/v2",
+            params={"aid": aid, "bvid": bvid, "cid": cid},
+            wbi=True,
         )
         subtitles = data.get("data", {}).get("subtitle", {}).get("subtitles", [])
         if not subtitles:
