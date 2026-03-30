@@ -31,7 +31,7 @@ export default function VideoStatsCards({ stats }: VideoStatsCardsProps) {
     { labelKey: "stats.comments", value: formatNumber(stats.comment_count), color: "text-pink-500" },
     {
       labelKey: "stats.interactionRate",
-      value: `${(stats.interaction_rate * 100).toFixed(2)}%`,
+      value: `${stats.interaction_rate.toFixed(2)}%`,
       color: "text-green-500",
     },
   ];
