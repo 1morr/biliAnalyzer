@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 from app.models import User, Video, VideoStats, VideoContent, Query, QueryVideo
 from app.services.bilibili import BilibiliClient
+
+logger = logging.getLogger(__name__)
 
 
 async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str | None):
@@ -145,6 +148,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             await db.commit()
 
         except Exception as e:
+            logger.exception("Fetch task failed for query %s: %s", query_id, e)
             query.status = "error"
             query.error_message = str(e)
             await db.commit()

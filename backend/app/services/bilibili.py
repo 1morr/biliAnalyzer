@@ -15,6 +15,13 @@ MIXIN_KEY_ENC_TAB = [
     36,20,34,44,52
 ]
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Referer": "https://www.bilibili.com",
+}
+
+
 class BilibiliClient:
     BASE = "https://api.bilibili.com"
 
@@ -24,13 +31,26 @@ class BilibiliClient:
         self._sub_key: str | None = None
         self._semaphore = asyncio.Semaphore(1)  # rate limit: 1 concurrent request
         self._last_request_time: float = 0
+        cookies = {}
+        if sessdata:
+            cookies["SESSDATA"] = sessdata
+        self._client = httpx.AsyncClient(
+            headers=HEADERS, cookies=cookies, timeout=30,
+        )
 
     def _get_mixin_key(self, orig: str) -> str:
         return "".join(orig[i] for i in MIXIN_KEY_ENC_TAB)[:32]
 
     def _sign_wbi(self, params: dict) -> dict:
         mixin_key = self._get_mixin_key(self._img_key + self._sub_key)
-        params = dict(sorted({**params, "wts": int(time.time())}.items()))
+        params = {
+            **params,
+            "dm_img_list": "[]",
+            "dm_img_str": "V2ViR0wgMS4w",
+            "dm_cover_img_str": "QU5HTEUgKEludGVsLCBJbnRlbChSKSBVSEQgR3Jh",
+            "wts": int(time.time()),
+        }
+        params = dict(sorted(params.items()))
         query = urllib.parse.urlencode(params)
         w_rid = hashlib.md5((query + mixin_key).encode()).hexdigest()
         params["w_rid"] = w_rid
@@ -45,26 +65,19 @@ class BilibiliClient:
                 await asyncio.sleep(wait)
             self._last_request_time = time.time()
 
-    def _get_cookies(self) -> dict:
-        if self._sessdata:
-            return {"SESSDATA": self._sessdata}
-        return {}
-
     async def _request(self, url: str, params: dict | None = None, wbi: bool = False) -> dict:
         await self._throttle()
         if wbi:
             if not self._img_key:
                 await self._refresh_wbi_keys()
             params = self._sign_wbi(params or {})
-        async with httpx.AsyncClient(cookies=self._get_cookies(), timeout=30) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            return resp.json()
+        resp = await self._client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
     async def _refresh_wbi_keys(self):
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{self.BASE}/x/web-interface/nav")
-            data = resp.json()["data"]
+        resp = await self._client.get(f"{self.BASE}/x/web-interface/nav")
+        data = resp.json()["data"]
         img_url = data["wbi_img"]["img_url"]
         sub_url = data["wbi_img"]["sub_url"]
         self._img_key = img_url.rsplit("/", 1)[1].split(".")[0]
@@ -91,7 +104,9 @@ class BilibiliClient:
         return {"videos": vlist, "total": total, "page": page}
 
     async def get_video_detail(self, bvid: str) -> dict:
-        data = await self._request(f"{self.BASE}/x/web-interface/view", params={"bvid": bvid})
+        data = await self._request(
+            f"{self.BASE}/x/web-interface/view", params={"bvid": bvid}
+        )
         d = data["data"]
         stat = d["stat"]
         tags_str = ""
@@ -101,13 +116,14 @@ class BilibiliClient:
             "bvid": d["bvid"], "aid": d["aid"], "cid": d["cid"],
             "title": d["title"], "description": d.get("desc", ""),
             "cover_url": d["pic"], "duration": d["duration"],
-            "published_at": d["pubdate"],  # unix timestamp
+            "published_at": d["pubdate"],
             "tags": tags_str,
             "stats": {
-                "views": stat["view"], "likes": stat["like"], "coins": stat["coin"],
-                "favorites": stat["favorite"], "shares": stat["share"],
-                "danmaku_count": stat["danmaku"], "comment_count": stat["reply"],
-            }
+                "views": stat["view"], "likes": stat["like"],
+                "coins": stat["coin"], "favorites": stat["favorite"],
+                "shares": stat["share"], "danmaku_count": stat["danmaku"],
+                "comment_count": stat["reply"],
+            },
         }
 
     async def get_comments(self, aid: int, max_pages: int = 5) -> list[str]:
@@ -127,9 +143,8 @@ class BilibiliClient:
         if not self._sessdata:
             return []
         await self._throttle()
-        async with httpx.AsyncClient(cookies=self._get_cookies(), timeout=30) as client:
-            resp = await client.get(f"https://comment.bilibili.com/{cid}.xml")
-            resp.raise_for_status()
+        resp = await self._client.get(f"https://comment.bilibili.com/{cid}.xml")
+        resp.raise_for_status()
         root = ElementTree.fromstring(resp.content)
         return [d.text for d in root.findall(".//d") if d.text]
 
@@ -149,8 +164,7 @@ class BilibiliClient:
         if subtitle_url.startswith("//"):
             subtitle_url = "https:" + subtitle_url
         await self._throttle()
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(subtitle_url)
-            resp.raise_for_status()
-            sub_data = resp.json()
+        resp = await self._client.get(subtitle_url)
+        resp.raise_for_status()
+        sub_data = resp.json()
         return " ".join(item["content"] for item in sub_data.get("body", []))
