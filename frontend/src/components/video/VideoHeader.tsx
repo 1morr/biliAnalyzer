@@ -30,6 +30,7 @@ export default function VideoHeader({ video }: VideoHeaderProps) {
           <img
             src={video.cover_url}
             alt={video.title}
+            referrerPolicy="no-referrer"
             className="w-[200px] h-[125px] rounded-lg object-cover border border-border"
           />
         ) : (

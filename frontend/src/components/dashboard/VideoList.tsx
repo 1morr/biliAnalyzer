@@ -61,6 +61,7 @@ function VideoRow({ video, queryId }: VideoRowProps) {
           <img
             src={video.cover_url}
             alt={video.title}
+            referrerPolicy="no-referrer"
             className="h-[62px] w-[100px] rounded object-cover"
           />
         ) : (
