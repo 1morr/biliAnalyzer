@@ -81,6 +81,8 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     )
                     db.add(video)
                 else:
+                    existing.aid = detail["aid"]
+                    existing.cid = detail["cid"]
                     existing.title = detail["title"]
                     existing.tags = detail["tags"]
                     existing.updated_at = datetime.now(timezone.utc)
@@ -113,7 +115,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
 
                 comments = await client.get_comments(aid) if aid else []
                 danmakus = await client.get_danmakus(cid) if cid else []
-                subtitle = await client.get_subtitle(bvid, cid) if cid else ""
+                subtitle = await client.get_subtitle(bvid, aid, cid) if (aid and cid) else ""
 
                 db.add(VideoContent(
                     bvid=bvid,
