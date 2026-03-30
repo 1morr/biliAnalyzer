@@ -151,9 +151,24 @@ class BilibiliClient:
     # --- Public API methods ---
 
     async def get_user_info(self, uid: int) -> dict:
+        # Primary: x/web-interface/card (less strict rate limiting)
+        try:
+            data = await self._request(
+                f"{self.BASE}/x/web-interface/card",
+                params={"mid": uid, "photo": "false"},
+            )
+            if data.get("code") == 0:
+                card = data["data"]["card"]
+                self._user_name_cache[uid] = card["name"]
+                return {"uid": uid, "name": card["name"], "avatar_url": card["face"]}
+            logger.info("card API returned code %s, falling back to acc/info", data.get("code"))
+        except Exception as e:
+            logger.info("card API failed (%s), falling back to acc/info", e)
+        # Fallback: x/space/wbi/acc/info with WBI signing
         data = await self._request(
-            f"{self.BASE}/x/space/acc/info",
+            f"{self.BASE}/x/space/wbi/acc/info",
             params={"mid": uid},
+            wbi=True,
         )
         if data.get("code") != 0:
             raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
@@ -188,9 +203,9 @@ class BilibiliClient:
         name = self._user_name_cache.get(uid)
         if not name:
             user_info = await self._request(
-                f"{self.BASE}/x/space/acc/info", params={"mid": uid}
+                f"{self.BASE}/x/web-interface/card", params={"mid": uid, "photo": "false"}
             )
-            name = user_info.get("data", {}).get("name", "")
+            name = user_info.get("data", {}).get("card", {}).get("name", "")
             if name:
                 self._user_name_cache[uid] = name
         if not name:
