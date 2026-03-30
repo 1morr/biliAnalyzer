@@ -1,0 +1,31 @@
+{
+  "app": { "title": "BiliAnalyzer", "newQuery": "+ New Query" },
+  "sidebar": { "queryHistory": "Query History", "videos": "videos", "views": "views" },
+  "stats": {
+    "totalViews": "Total Views", "likes": "Likes", "coins": "Coins",
+    "favorites": "Favorites", "shares": "Shares", "danmaku": "Danmaku",
+    "comments": "Comments", "videos": "Videos", "interactionRate": "Interaction Rate"
+  },
+  "chart": {
+    "viewsTrend": "Views Trend", "interaction": "Interaction Comparison",
+    "scatter": "Views vs Interaction Rate", "wordcloud": { "title": "Title Keywords", "tag": "Tag Cloud", "danmaku": "Danmaku Cloud", "comment": "Comment Cloud", "content": "Content Cloud", "interaction": "Interaction Cloud" }
+  },
+  "video": {
+    "list": "Videos", "detail": "Video Detail", "sort": "Sort",
+    "openOnBilibili": "Open on Bilibili", "backToDashboard": "Back to Dashboard",
+    "duration": "Duration", "publishedAt": "Published",
+    "comparison": "This Video vs Average", "engagement": "Engagement Breakdown"
+  },
+  "ai": { "title": "AI Analysis", "analyze": "AI Analysis", "regenerate": "Regenerate", "notConfigured": "Please configure AI first", "analyzing": "Analyzing..." },
+  "settings": {
+    "title": "Settings", "bilibili": "Bilibili Connection", "sessdata": "SESSDATA",
+    "sessdataHelp": "Get SESSDATA from browser cookies to enable danmaku and subtitle features",
+    "aiConfig": "AI Configuration", "baseUrl": "Base URL", "apiKey": "API Key",
+    "model": "Model", "testConnection": "Test Connection",
+    "appearance": "Appearance", "theme": "Theme", "light": "Light", "dark": "Dark", "system": "System",
+    "language": "Language", "save": "Save", "saved": "Saved",
+    "data": "Data Management", "clearAll": "Clear All Data", "clearConfirm": "Are you sure you want to clear all data?"
+  },
+  "common": { "loading": "Loading...", "error": "Something went wrong", "noData": "No data", "cancel": "Cancel", "confirm": "Confirm", "fetchData": "Fetch Data" },
+  "query": { "uid": "UID", "dateRange": "Date Range", "preset": { "7d": "Last 7 days", "30d": "Last 30 days", "3m": "Last 3 months", "6m": "Last 6 months", "1y": "Last 1 year", "all": "All time" } }
+}

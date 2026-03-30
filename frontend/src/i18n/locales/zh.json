@@ -1,0 +1,31 @@
+{
+  "app": { "title": "BiliAnalyzer", "newQuery": "+ 新建查询" },
+  "sidebar": { "queryHistory": "查询历史", "videos": "个视频", "views": "次播放" },
+  "stats": {
+    "totalViews": "总播放量", "likes": "点赞", "coins": "投币",
+    "favorites": "收藏", "shares": "分享", "danmaku": "弹幕",
+    "comments": "评论", "videos": "视频数", "interactionRate": "互动率"
+  },
+  "chart": {
+    "viewsTrend": "播放量趋势", "interaction": "互动数据对比",
+    "scatter": "播放量 vs 互动率", "wordcloud": { "title": "标题词云", "tag": "标签词云", "danmaku": "弹幕词云", "comment": "评论词云", "content": "内容词云", "interaction": "互动词云" }
+  },
+  "video": {
+    "list": "视频列表", "detail": "视频详情", "sort": "排序",
+    "openOnBilibili": "在B站打开", "backToDashboard": "返回仪表板",
+    "duration": "时长", "publishedAt": "发布时间",
+    "comparison": "本视频 vs 平均", "engagement": "互动分布"
+  },
+  "ai": { "title": "AI 分析", "analyze": "AI 分析", "regenerate": "重新生成", "notConfigured": "请先配置AI", "analyzing": "分析中..." },
+  "settings": {
+    "title": "设置", "bilibili": "Bilibili 连接", "sessdata": "SESSDATA",
+    "sessdataHelp": "从浏览器Cookie获取SESSDATA以启用弹幕和字幕功能",
+    "aiConfig": "AI 配置", "baseUrl": "Base URL", "apiKey": "API Key",
+    "model": "模型", "testConnection": "测试连接",
+    "appearance": "外观", "theme": "主题", "light": "浅色", "dark": "深色", "system": "跟随系统",
+    "language": "语言", "save": "保存", "saved": "已保存",
+    "data": "数据管理", "clearAll": "清除所有数据", "clearConfirm": "确定要清除所有数据吗？"
+  },
+  "common": { "loading": "加载中...", "error": "出错了", "noData": "暂无数据", "cancel": "取消", "confirm": "确认", "fetchData": "获取数据" },
+  "query": { "uid": "UID", "dateRange": "时间段", "preset": { "7d": "最近7天", "30d": "最近30天", "3m": "最近3个月", "6m": "最近6个月", "1y": "最近1年", "all": "全部" } }
+}
