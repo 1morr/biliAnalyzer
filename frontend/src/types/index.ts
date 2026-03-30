@@ -45,6 +45,7 @@ export interface InteractionData { likes: number; coins: number; favorites: numb
 export interface VideoComparison {
   metrics: string[]; video_values: number[];
   average_values: number[]; percentage_diff: number[];
+  max_values: number[];
 }
 
 export interface SettingsResponse {

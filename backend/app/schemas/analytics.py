@@ -30,3 +30,4 @@ class VideoComparison(BaseModel):
     video_values: list[float]
     average_values: list[float]
     percentage_diff: list[float]
+    max_values: list[float]  # Global max for each metric across all videos in query

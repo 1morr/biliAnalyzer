@@ -21,16 +21,14 @@ export default function RadarChart({ data }: RadarChartProps) {
 
   const isDark = document.documentElement.classList.contains("dark");
 
-  // Normalize each metric to 0-100 range
+  // Normalize each metric using global max values from the query
   const videoNorm = data.video_values.map((v, i) => {
-    const avg = data.average_values[i];
-    const maxVal = Math.max(v, avg, 1);
+    const maxVal = Math.max(data.max_values[i], 1);
     return (v / maxVal) * 100;
   });
 
   const avgNorm = data.average_values.map((v, i) => {
-    const vid = data.video_values[i];
-    const maxVal = Math.max(vid, v, 1);
+    const maxVal = Math.max(data.max_values[i], 1);
     return (v / maxVal) * 100;
   });
 

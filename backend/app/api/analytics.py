@@ -96,6 +96,7 @@ async def video_comparison(
 
     video_values = [float(getattr(video_stats, m)) for m in metrics]
     avg_values = [sum(getattr(s, m) for s in latest_per.values()) / count for m in metrics]
+    max_values = [max(getattr(s, m) for s in latest_per.values()) for m in metrics]
     pct_diff = [
         round((v - a) / a * 100, 1) if a > 0 else 0.0
         for v, a in zip(video_values, avg_values)
@@ -104,6 +105,7 @@ async def video_comparison(
     return VideoComparison(
         metrics=labels, video_values=video_values,
         average_values=[round(a, 1) for a in avg_values],
+        max_values=[round(m, 1) for m in max_values],
         percentage_diff=pct_diff,
     )
 
