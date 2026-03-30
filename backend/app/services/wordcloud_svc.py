@@ -39,6 +39,15 @@ def compute_word_frequencies(texts: list[str], limit: int = 100) -> list[dict]:
     return [{"name": word, "value": count} for word, count in counter.most_common(limit)]
 
 
+def compute_tag_frequencies(tags: list[str], limit: int = 100) -> list[dict]:
+    """Count tag frequencies directly (no jieba tokenization)."""
+    cleaned = [t.strip() for t in tags if t.strip()]
+    if not cleaned:
+        return []
+    counter = Counter(cleaned)
+    return [{"name": tag, "value": count} for tag, count in counter.most_common(limit)]
+
+
 def compute_user_frequencies(items: list[dict], limit: int = 100) -> list[dict]:
     """Count user frequencies from normalized items [{"text", "user"}, ...]."""
     users = [item["user"] for item in items if item.get("user")]

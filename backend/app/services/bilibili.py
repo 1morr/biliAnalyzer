@@ -108,16 +108,17 @@ class BilibiliClient:
         return {"videos": vlist, "total": total, "page": page}
 
     async def get_video_detail(self, bvid: str) -> dict:
+        # Use /view/detail which includes Tags in the response
         data = await self._request(
-            f"{self.BASE}/x/web-interface/view", params={"bvid": bvid}
+            f"{self.BASE}/x/web-interface/view/detail",
+            params={"bvid": bvid}, wbi=True,
         )
         if data.get("code") != 0:
             raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
-        d = data["data"]
+        d = data["data"]["View"]
         stat = d["stat"]
-        tags_str = ""
-        if "tag" in d:
-            tags_str = ",".join(t["tag_name"] for t in d.get("tag", []))
+        tags = data["data"].get("Tags") or []
+        tags_str = ",".join(t["tag_name"] for t in tags if "tag_name" in t)
         return {
             "bvid": d["bvid"], "aid": d["aid"], "cid": d["cid"],
             "title": d["title"], "description": d.get("desc", ""),

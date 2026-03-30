@@ -10,7 +10,7 @@ from app.schemas.analytics import (
     WordFrequencyResponse, WordDetailResponse,
 )
 from app.services.wordcloud_svc import (
-    compute_word_frequencies, compute_user_frequencies,
+    compute_word_frequencies, compute_tag_frequencies, compute_user_frequencies,
     extract_word_contexts, extract_user_comments, normalize_items,
 )
 
@@ -127,6 +127,11 @@ async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depend
     if wc_type == "user":
         items = _gather_query_normalized_items(rows, "comment")
         words = compute_user_frequencies(items)
+    elif wc_type == "tag":
+        texts = _gather_query_texts(rows, wc_type)
+        if not texts:
+            raise HTTPException(status_code=404, detail="No data available for word cloud")
+        words = compute_tag_frequencies(texts)
     else:
         texts = _gather_query_texts(rows, wc_type)
         if not texts:
