@@ -90,6 +90,8 @@ class BilibiliClient:
             f"{self.BASE}/x/space/wbi/acc/info",
             params={"mid": uid}, wbi=True
         )
+        if data.get("code") != 0:
+            raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
         info = data["data"]
         return {"uid": uid, "name": info["name"], "avatar_url": info["face"]}
 
@@ -99,6 +101,8 @@ class BilibiliClient:
             params={"mid": uid, "ps": page_size, "pn": page, "order": "pubdate"},
             wbi=True
         )
+        if data.get("code") != 0:
+            raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
         vlist = data["data"]["list"]["vlist"]
         total = data["data"]["page"]["count"]
         return {"videos": vlist, "total": total, "page": page}
@@ -107,6 +111,8 @@ class BilibiliClient:
         data = await self._request(
             f"{self.BASE}/x/web-interface/view", params={"bvid": bvid}
         )
+        if data.get("code") != 0:
+            raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
         d = data["data"]
         stat = d["stat"]
         tags_str = ""
