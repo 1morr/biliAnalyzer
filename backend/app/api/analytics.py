@@ -1,4 +1,6 @@
+import json
 from collections import defaultdict
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -6,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import Query, QueryVideo, Video, VideoStats, VideoContent
 from app.schemas.analytics import StatsSummary, TrendPoint, InteractionData, VideoComparison
+from app.services.wordcloud_svc import generate_wordcloud
+from app.core.config import settings as app_settings
 
 router = APIRouter()
 
@@ -102,3 +106,85 @@ async def video_comparison(
         average_values=[round(a, 1) for a in avg_values],
         percentage_diff=pct_diff,
     )
+
+
+QUERY_WC_TYPES = {"title", "tag", "danmaku", "comment"}
+VIDEO_WC_TYPES = {"content", "interaction"}
+
+
+@router.get("/queries/{query_id}/wordcloud/{wc_type}")
+async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depends(get_db)):
+    if wc_type not in QUERY_WC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
+
+    cache_path = Path(app_settings.DATA_DIR) / "wordclouds" / f"{query_id}_{wc_type}.png"
+    if cache_path.exists():
+        return FileResponse(cache_path, media_type="image/png")
+
+    # Gather texts
+    result = await db.execute(
+        select(Video, VideoContent)
+        .join(QueryVideo, QueryVideo.bvid == Video.bvid)
+        .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
+        .where(QueryVideo.query_id == query_id)
+    )
+    rows = result.all()
+
+    texts = []
+    for video, content in rows:
+        if wc_type == "title":
+            texts.append(video.title or "")
+        elif wc_type == "tag":
+            texts.extend((video.tags or "").split(","))
+        elif wc_type == "danmaku" and content and content.danmakus:
+            texts.extend(json.loads(content.danmakus))
+        elif wc_type == "comment" and content and content.comments:
+            texts.extend(json.loads(content.comments))
+
+    if not texts:
+        raise HTTPException(status_code=404, detail="No data available for word cloud")
+
+    output = generate_wordcloud(texts, str(cache_path))
+    if not output:
+        raise HTTPException(status_code=404, detail="Not enough text data")
+    return FileResponse(cache_path, media_type="image/png")
+
+
+@router.get("/videos/{bvid}/wordcloud/{wc_type}")
+async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(get_db)):
+    if wc_type not in VIDEO_WC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {VIDEO_WC_TYPES}")
+
+    cache_path = Path(app_settings.DATA_DIR) / "wordclouds" / f"{bvid}_{wc_type}.png"
+    if cache_path.exists():
+        return FileResponse(cache_path, media_type="image/png")
+
+    video = await db.get(Video, bvid)
+    if not video:
+        raise HTTPException(status_code=404)
+
+    content_result = await db.execute(
+        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
+    )
+    content = content_result.scalar_one_or_none()
+
+    texts = []
+    if wc_type == "content":
+        texts.append(video.title or "")
+        texts.extend((video.tags or "").split(","))
+        if content and content.subtitle:
+            texts.append(content.subtitle)
+    elif wc_type == "interaction":
+        if content:
+            if content.danmakus:
+                texts.extend(json.loads(content.danmakus))
+            if content.comments:
+                texts.extend(json.loads(content.comments))
+
+    if not texts:
+        raise HTTPException(status_code=404, detail="No data available")
+
+    output = generate_wordcloud(texts, str(cache_path))
+    if not output:
+        raise HTTPException(status_code=404, detail="Not enough text data")
+    return FileResponse(cache_path, media_type="image/png")
