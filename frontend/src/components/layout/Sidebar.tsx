@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { SettingsIcon } from "lucide-react";
+import { SettingsIcon, Trash2Icon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { QuerySummary } from "@/types";
@@ -16,6 +24,7 @@ export default function Sidebar() {
 
   const [queries, setQueries] = useState<QuerySummary[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<QuerySummary | null>(null);
 
   // Poll queries every 3 seconds to update status during fetching
   useEffect(() => {
@@ -47,6 +56,22 @@ export default function Sidebar() {
   function formatViews(views: number): string {
     if (views >= 10000) return `${(views / 10000).toFixed(1)}w`;
     return String(views);
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const deletedId = deleteTarget.id;
+    try {
+      await api.deleteQuery(deletedId);
+      setQueries((prev) => prev.filter((q) => q.id !== deletedId));
+      if (queryId === String(deletedId)) {
+        navigate("/dashboard");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   return (
@@ -91,17 +116,17 @@ export default function Sidebar() {
               {queries.map((q) => {
                 const isActive = queryId === String(q.id);
                 return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => navigate(`/dashboard/${q.id}`)}
-                    className={cn(
-                      "w-full rounded-lg border p-2 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-800",
-                      isActive
-                        ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                        : "border border-border"
-                    )}
-                  >
+                  <div key={q.id} className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/${q.id}`)}
+                      className={cn(
+                        "w-full rounded-lg border p-2 pr-7 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-800",
+                        isActive
+                          ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border border-border"
+                      )}
+                    >
                     <p
                       className="font-semibold text-foreground truncate"
                       style={{ fontSize: "12px" }}
@@ -138,7 +163,19 @@ export default function Sidebar() {
                           : q.status}
                       </p>
                     )}
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(q);
+                      }}
+                      className="absolute top-2 right-1.5 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                      aria-label={t("sidebar.deleteQuery")}
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -174,6 +211,29 @@ export default function Sidebar() {
           // Queries will refresh via polling
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("sidebar.deleteConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("sidebar.deleteConfirmDesc", { uid: deleteTarget?.uid })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              className="bg-red-500 hover:bg-red-600 text-white"
+              onClick={handleDelete}
+            >
+              {t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

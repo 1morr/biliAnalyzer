@@ -1,6 +1,6 @@
 {
   "app": { "title": "BiliAnalyzer", "newQuery": "+ 新建查询" },
-  "sidebar": { "queryHistory": "查询历史", "videos": "个视频", "views": "次播放" },
+  "sidebar": { "queryHistory": "查询历史", "videos": "个视频", "views": "次播放", "deleteQuery": "删除查询", "deleteConfirmTitle": "删除查询", "deleteConfirmDesc": "确定要删除 UID {{uid}} 的查询记录吗？相关数据将被永久删除。" },
   "stats": {
     "totalViews": "总播放量", "likes": "点赞", "coins": "投币",
     "favorites": "收藏", "shares": "分享", "danmaku": "弹幕",

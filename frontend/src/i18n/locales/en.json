@@ -1,6 +1,6 @@
 {
   "app": { "title": "BiliAnalyzer", "newQuery": "+ New Query" },
-  "sidebar": { "queryHistory": "Query History", "videos": "videos", "views": "views" },
+  "sidebar": { "queryHistory": "Query History", "videos": "videos", "views": "views", "deleteQuery": "Delete query", "deleteConfirmTitle": "Delete Query", "deleteConfirmDesc": "Are you sure you want to delete the query for UID {{uid}}? All related data will be permanently removed." },
   "stats": {
     "totalViews": "Total Views", "likes": "Likes", "coins": "Coins",
     "favorites": "Favorites", "shares": "Shares", "danmaku": "Danmaku",
