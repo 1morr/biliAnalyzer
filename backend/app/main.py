@@ -27,8 +27,9 @@ if settings.CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-from app.api import fetch, queries, videos
+from app.api import fetch, queries, videos, analytics
 
 app.include_router(fetch.router, prefix="/api", tags=["fetch"])
 app.include_router(queries.router, prefix="/api", tags=["queries"])
 app.include_router(videos.router, prefix="/api", tags=["videos"])
+app.include_router(analytics.router, prefix="/api", tags=["analytics"])
