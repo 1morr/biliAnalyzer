@@ -65,7 +65,7 @@ export interface WordFrequencyResponse {
 export interface SnippetItem {
   text: string;
   user: string | null;
-  source: string | null; // "danmaku" | "comment" | null
+  source: string | null; // "danmaku" | "comment" | "title" | "tag" | "subtitle" | null
 }
 
 export interface WordContextVideo {

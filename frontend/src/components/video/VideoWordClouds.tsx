@@ -7,6 +7,7 @@ import WordDetailPanel from "@/components/shared/WordDetailPanel";
 
 interface VideoWordCloudsProps {
   bvid: string;
+  hasSubtitle: boolean;
 }
 
 type VideoCloudType = "content" | "interaction" | "user";
@@ -64,11 +65,12 @@ function CloudPanel({ bvid, type, labelKey }: { bvid: string; type: VideoCloudTy
   );
 }
 
-export default function VideoWordClouds({ bvid }: VideoWordCloudsProps) {
+export default function VideoWordClouds({ bvid, hasSubtitle }: VideoWordCloudsProps) {
+  const clouds = hasSubtitle ? CLOUDS : CLOUDS.filter((c) => c.type !== "content");
   return (
     <div>
       <div className="grid grid-cols-2 gap-3">
-        {CLOUDS.map(({ type, labelKey }) => (
+        {clouds.map(({ type, labelKey }) => (
           <CloudPanel key={type} bvid={bvid} type={type} labelKey={labelKey} />
         ))}
       </div>

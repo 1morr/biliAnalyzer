@@ -93,7 +93,7 @@ export default function VideoDetailPage() {
 
       {/* Word clouds */}
       <div className="rounded-xl border border-border bg-card p-4">
-        <VideoWordClouds bvid={video.bvid} />
+        <VideoWordClouds bvid={video.bvid} hasSubtitle={video.has_subtitle} />
       </div>
     </div>
   );

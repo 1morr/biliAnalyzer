@@ -314,9 +314,9 @@ def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple]:
         bvid = video.bvid
         title = video.title or bvid
         if wc_type == "title":
-            annotated.append((bvid, title, video.title or "", None, None))
+            annotated.append((bvid, title, video.title or "", None, "title"))
         elif wc_type == "tag":
-            annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, None))
+            annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, "tag"))
         elif wc_type == "danmaku" and content and content.danmakus:
             for item in normalize_items(_safe_json_loads(content.danmakus)):
                 annotated.append((bvid, title, item["text"], item["user"], "danmaku"))
@@ -362,10 +362,10 @@ def _gather_video_annotated_texts(
     bvid = video.bvid
     title = video.title or bvid
     if wc_type == "content":
-        annotated.append((bvid, title, video.title or "", None, None))
-        annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, None))
+        annotated.append((bvid, title, video.title or "", None, "title"))
+        annotated.append((bvid, title, (video.tags or "").replace(",", " "), None, "tag"))
         if content and content.subtitle:
-            annotated.append((bvid, title, content.subtitle, None, None))
+            annotated.append((bvid, title, content.subtitle, None, "subtitle"))
     elif wc_type == "interaction":
         if content:
             if content.danmakus:
