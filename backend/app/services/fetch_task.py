@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import random
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,11 @@ from app.models import User, Video, VideoStats, VideoContent, Query, QueryVideo
 from app.services.bilibili import BilibiliClient
 
 logger = logging.getLogger(__name__)
+
+# Batch processing config to avoid detection
+BATCH_SIZE = 15  # Process 15 videos per batch
+BATCH_BREAK_MIN = 8  # Min seconds between batches
+BATCH_BREAK_MAX = 15  # Max seconds between batches
 
 
 async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str | None):
@@ -60,7 +67,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             query.video_count = total
             await db.commit()
 
-            # Step 3: Fetch details for each video
+            # Step 3: Fetch details for each video (with batch breaks)
             subtitle_flags = {}  # bvid -> bool, from /view API's subtitle.list
             for i, v in enumerate(all_videos, 1):
                 query.progress = f"Fetching video {i}/{total}"
@@ -102,7 +109,13 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                 db.add(QueryVideo(query_id=query_id, bvid=bvid))
                 await db.commit()
 
-            # Step 4: Fetch content
+                # Batch break: pause after every BATCH_SIZE videos
+                if i % BATCH_SIZE == 0 and i < total:
+                    break_time = random.uniform(BATCH_BREAK_MIN, BATCH_BREAK_MAX)
+                    logger.info("Batch break after %d videos, pausing for %.1fs", i, break_time)
+                    await asyncio.sleep(break_time)
+
+            # Step 4: Fetch content (with batch breaks)
             query.status = "fetching_content"
             await db.commit()
 
@@ -131,6 +144,12 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     subtitle=subtitle,
                 ))
                 await db.commit()
+
+                # Batch break: pause after every BATCH_SIZE videos
+                if i % BATCH_SIZE == 0 and i < total:
+                    break_time = random.uniform(BATCH_BREAK_MIN, BATCH_BREAK_MAX)
+                    logger.info("Batch break after %d content fetches, pausing for %.1fs", i, break_time)
+                    await asyncio.sleep(break_time)
 
             # Step 5: Compute aggregates
             stmt = (select(VideoStats)

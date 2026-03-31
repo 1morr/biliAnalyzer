@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import logging
+import random
 import time
 import urllib.parse
 import uuid
@@ -46,6 +47,8 @@ class BilibiliClient:
         self._user_name_cache: dict[int, str] = {}
         self._semaphore = asyncio.Semaphore(1)  # rate limit: 1 concurrent request
         self._last_request_time: float = 0
+        self._rate_limit_count: int = 0  # track -799 occurrences
+        self._base_delay: float = 1.5  # base delay between requests
         cookies = {
             "buvid3": f"{uuid.uuid4()}infoc",
             "b_nut": str(int(time.time())),
@@ -107,10 +110,12 @@ class BilibiliClient:
         return sanitized
 
     async def _throttle(self):
-        """Ensure at least 1.5 seconds between requests."""
+        """Ensure random delay between requests with dynamic adjustment."""
         async with self._semaphore:
             now = time.time()
-            wait = max(0, 1.5 - (now - self._last_request_time))
+            # Add random jitter: base_delay to base_delay*2.5
+            jitter = random.uniform(self._base_delay, self._base_delay * 2.5)
+            wait = max(0, jitter - (now - self._last_request_time))
             if wait > 0:
                 await asyncio.sleep(wait)
             self._last_request_time = time.time()
@@ -134,12 +139,23 @@ class BilibiliClient:
                 resp = await self._client.get(url, params=params)
             resp.raise_for_status()
             data = resp.json()
-            # Retry on rate limit (-799)
-            if data.get("code") == -799 and attempt < max_retries - 1:
-                delay = 3 * (attempt + 1)
-                logger.warning("Rate limited (-799), retrying in %ds (attempt %d/%d)", delay, attempt + 1, max_retries)
-                await asyncio.sleep(delay)
-                continue
+            # Retry on rate limit (-799) with exponential backoff
+            if data.get("code") == -799:
+                self._rate_limit_count += 1
+                # Increase base delay if getting rate limited frequently
+                if self._rate_limit_count >= 3:
+                    self._base_delay = min(self._base_delay * 1.5, 5.0)
+                    logger.warning("Frequent rate limits detected, increasing base delay to %.1fs", self._base_delay)
+                if attempt < max_retries - 1:
+                    # Exponential backoff with jitter: 3s, 9s, 27s
+                    delay = (3 ** (attempt + 1)) + random.uniform(0, 2)
+                    logger.warning("Rate limited (-799), retrying in %.1fs (attempt %d/%d)", delay, attempt + 1, max_retries)
+                    await asyncio.sleep(delay)
+                    continue
+            else:
+                # Reset rate limit counter on success
+                if self._rate_limit_count > 0:
+                    self._rate_limit_count = max(0, self._rate_limit_count - 1)
             return data
         return data  # return last response if all retries exhausted
 
