@@ -32,6 +32,11 @@ export const api = {
   getSettings: () => request<SettingsResponse>("/settings"),
   updateSettings: (data: Partial<SettingsResponse>) =>
     request<SettingsResponse>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+  testSessdata: (sessdata: string) =>
+    request<{ status: string; message?: string }>("/settings/test-sessdata", {
+      method: "POST",
+      body: JSON.stringify({ sessdata }),
+    }),
   testAi: () => request<{ status: string; message?: string }>("/settings/test-ai", { method: "POST" }),
   getWordFrequency: (queryId: number, type: string) =>
     request<WordFrequencyResponse>(`/queries/${queryId}/wordcloud/${type}`),

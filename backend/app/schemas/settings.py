@@ -13,3 +13,7 @@ class SettingsUpdate(BaseModel):
     ai_base_url: str | None = None
     ai_api_key: str | None = None
     ai_model: str | None = None
+
+
+class SessdataTestRequest(BaseModel):
+    sessdata: str | None = None

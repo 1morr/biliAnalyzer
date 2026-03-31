@@ -43,3 +43,39 @@ async def test_get_subtitle_returns_empty_without_sessdata():
     result = await client.get_subtitle("BV1xx411c7mD", 1, 2)
 
     assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_validate_sessdata_returns_user_name():
+    client = BilibiliClient.__new__(BilibiliClient)
+    client._sessdata = "test-sessdata"
+
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+        return {"code": 0, "data": {"isLogin": True, "uname": "Roxy"}}
+
+    client._request = fake_request
+
+    result = await client.validate_sessdata()
+
+    assert result == {"uname": "Roxy"}
+
+
+@pytest.mark.asyncio
+async def test_validate_sessdata_raises_for_invalid_cookie():
+    client = BilibiliClient.__new__(BilibiliClient)
+    client._sessdata = "expired-sessdata"
+
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+        return {"code": 0, "data": {"isLogin": False}}
+
+    client._request = fake_request
+
+    with pytest.raises(Exception, match="invalid or expired"):
+        await client.validate_sessdata()
+
+
+@pytest.mark.asyncio
+async def test_aclose_ignores_missing_client():
+    client = BilibiliClient.__new__(BilibiliClient)
+
+    await client.aclose()

@@ -24,6 +24,7 @@
   "settings": {
     "title": "设置", "bilibili": "Bilibili 连接", "sessdata": "SESSDATA",
     "sessdataHelp": "从浏览器Cookie获取SESSDATA以启用弹幕和字幕功能",
+    "validateSessdata": "验证 SESSDATA",
     "aiConfig": "AI 配置", "baseUrl": "Base URL", "apiKey": "API Key",
     "model": "模型", "testConnection": "测试连接",
     "appearance": "外观", "theme": "主题", "light": "浅色", "dark": "深色", "system": "跟随系统",

@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import AppSettings
-from app.schemas.settings import SettingsResponse, SettingsUpdate
+from app.schemas.settings import SettingsResponse, SettingsUpdate, SessdataTestRequest
 from app.core.security import encrypt_value, decrypt_value
+from app.services.bilibili import BilibiliClient
 
 router = APIRouter()
 
@@ -44,6 +45,15 @@ async def _set_setting(db: AsyncSession, key: str, value: str):
         ))
 
 
+async def _get_raw_setting(db: AsyncSession, key: str) -> str:
+    row = await db.get(AppSettings, key)
+    if not row or not row.value:
+        return DEFAULTS.get(key, "")
+    if row.is_sensitive:
+        return decrypt_value(row.value)
+    return row.value
+
+
 @router.get("/settings", response_model=SettingsResponse)
 async def get_settings(db: AsyncSession = Depends(get_db)):
     return SettingsResponse(
@@ -66,6 +76,29 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
         await _set_setting(db, "ai_model", data.ai_model)
     await db.commit()
     return await get_settings(db)
+
+
+@router.post("/settings/test-sessdata")
+async def test_sessdata_connection(data: SessdataTestRequest, db: AsyncSession = Depends(get_db)):
+    sessdata = data.sessdata
+    if sessdata == MASK:
+        sessdata = await _get_raw_setting(db, "sessdata")
+
+    if sessdata is None:
+        sessdata = await _get_raw_setting(db, "sessdata")
+
+    if not sessdata:
+        return {"status": "error", "message": "SESSDATA not configured"}
+
+    client = BilibiliClient(sessdata=sessdata)
+    try:
+        result = await client.validate_sessdata()
+        uname = result.get("uname")
+        return {"status": "ok", "message": f"Connected as {uname}" if uname else "SESSDATA is valid"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        await client.aclose()
 
 
 @router.post("/settings/test-ai")

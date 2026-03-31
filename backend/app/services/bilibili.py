@@ -56,6 +56,11 @@ class BilibiliClient:
             headers=HEADERS, cookies=cookies, timeout=30,
         )
 
+    async def aclose(self):
+        client = getattr(self, "_client", None)
+        if client is not None:
+            await client.aclose()
+
     def _get_mixin_key(self, orig: str) -> str:
         return "".join(orig[i] for i in MIXIN_KEY_ENC_TAB)[:32]
 
@@ -149,6 +154,18 @@ class BilibiliClient:
         self._wbi_keys_ts = time.time()
 
     # --- Public API methods ---
+
+    async def validate_sessdata(self) -> dict:
+        if not self._sessdata:
+            raise Exception("SESSDATA not configured")
+        data = await self._request(f"{self.BASE}/x/web-interface/nav")
+        if data.get("code") != 0:
+            raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
+        nav = data.get("data") or {}
+        if not nav.get("isLogin"):
+            raise Exception("SESSDATA is invalid or expired")
+        uname = nav.get("uname") or ""
+        return {"uname": uname}
 
     async def get_user_info(self, uid: int) -> dict:
         # Primary: x/web-interface/card (less strict rate limiting)

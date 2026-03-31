@@ -24,6 +24,7 @@
   "settings": {
     "title": "Settings", "bilibili": "Bilibili Connection", "sessdata": "SESSDATA",
     "sessdataHelp": "Get SESSDATA from browser cookies to enable danmaku and subtitle features",
+    "validateSessdata": "Validate SESSDATA",
     "aiConfig": "AI Configuration", "baseUrl": "Base URL", "apiKey": "API Key",
     "model": "Model", "testConnection": "Test Connection",
     "appearance": "Appearance", "theme": "Theme", "light": "Light", "dark": "Dark", "system": "System",

@@ -83,6 +83,8 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const [sessdataTestStatus, setSessdataTestStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [sessdataTestMessage, setSessdataTestMessage] = useState<string>("");
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [testMessage, setTestMessage] = useState<string>("");
 
@@ -103,6 +105,12 @@ export default function Settings() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  function handleSessdataChange(value: string) {
+    setSessdata(value);
+    setSessdataTestStatus("idle");
+    setSessdataTestMessage("");
+  }
 
   // Save server-side settings
   async function handleSave() {
@@ -125,6 +133,20 @@ export default function Settings() {
       setSaveError(e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestSessdata() {
+    setSessdataTestStatus("loading");
+    setSessdataTestMessage("");
+    try {
+      const res = await api.testSessdata(sessdata);
+      const isOk = res.status === "ok";
+      setSessdataTestStatus(isOk ? "ok" : "error");
+      setSessdataTestMessage(isOk ? (res.message || "OK") : (res.message || "Validation failed"));
+    } catch (e) {
+      setSessdataTestStatus("error");
+      setSessdataTestMessage(e instanceof Error ? e.message : "Validation failed");
     }
   }
 
@@ -181,9 +203,33 @@ export default function Settings() {
             <PasswordInput
               id="sessdata"
               value={sessdata}
-              onChange={(v) => setSessdata(v)}
+              onChange={handleSessdataChange}
               placeholder="SESSDATA"
             />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={handleTestSessdata}
+              disabled={sessdataTestStatus === "loading"}
+            >
+              {sessdataTestStatus === "loading" && (
+                <Loader2Icon className="size-4 animate-spin" />
+              )}
+              {t("settings.validateSessdata")}
+            </Button>
+            {sessdataTestStatus === "ok" && (
+              <span className="flex items-center gap-1 text-sm text-green-600">
+                <CheckCircleIcon className="size-4" />
+                {sessdataTestMessage || "OK"}
+              </span>
+            )}
+            {sessdataTestStatus === "error" && (
+              <span className="flex items-center gap-1 text-sm text-red-500">
+                <XCircleIcon className="size-4" />
+                {sessdataTestMessage}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
