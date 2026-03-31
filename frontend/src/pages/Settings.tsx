@@ -134,8 +134,9 @@ export default function Settings() {
     setTestMessage("");
     try {
       const res = await api.testAi();
-      setTestStatus("ok");
-      setTestMessage(res.message || "OK");
+      const isOk = res.status === "ok";
+      setTestStatus(isOk ? "ok" : "error");
+      setTestMessage(isOk ? (res.message || "OK") : (res.message || "Connection failed"));
     } catch (e) {
       setTestStatus("error");
       setTestMessage(e instanceof Error ? e.message : "Connection failed");
