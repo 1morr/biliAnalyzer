@@ -10,16 +10,20 @@ STOP_WORDS.update({"", " ", "\n", "\t", "哈哈", "啊", "了", "的", "是", "s
 
 
 def normalize_items(raw_items: list) -> list[dict]:
-    """Convert mixed format items to [{"text": str, "user": str|None}].
+    """Convert mixed format items to [{"text": str, "user": str|None, "location": str|None}].
 
-    Handles both old format (plain strings) and new format (dicts with text/user).
+    Handles both old format (plain strings) and new format (dicts with text/user/location).
     """
     result = []
     for item in raw_items:
         if isinstance(item, str):
-            result.append({"text": item, "user": None})
+            result.append({"text": item, "user": None, "location": None})
         elif isinstance(item, dict):
-            result.append({"text": item.get("text", ""), "user": item.get("user") or None})
+            result.append({
+                "text": item.get("text", ""),
+                "user": item.get("user") or None,
+                "location": item.get("location") or None
+            })
     return result
 
 
@@ -55,6 +59,17 @@ def compute_user_frequencies(items: list[dict], limit: int = 100) -> list[dict]:
         return []
     counter = Counter(users)
     return [{"name": user, "value": count} for user, count in counter.most_common(limit)]
+
+
+def compute_location_frequencies(items: list[dict], limit: int = 100) -> list[dict]:
+    """Count location frequencies from normalized items [{"text", "user", "location"}, ...]."""
+    locations = [item["location"] for item in items if item.get("location")]
+    if not locations:
+        return []
+    # Remove "IP属地：" prefix if present
+    cleaned_locations = [loc.replace("IP属地：", "").strip() for loc in locations]
+    counter = Counter(cleaned_locations)
+    return [{"name": location, "value": count} for location, count in counter.most_common(limit)]
 
 
 def extract_word_contexts(
@@ -145,6 +160,49 @@ def extract_user_comments(
         source = entry[4] if len(entry) > 4 else None
 
         if user != username or not raw_text:
+            continue
+
+        if bvid not in results:
+            results[bvid] = {"bvid": bvid, "title": title, "count": 0, "snippets": []}
+
+        results[bvid]["count"] += 1
+        if total_snippets < max_snippets:
+            text = raw_text if len(raw_text) <= 80 else raw_text[:80] + "..."
+            results[bvid]["snippets"].append({"text": text, "user": user, "source": source})
+            total_snippets += 1
+
+    return sorted(results.values(), key=lambda x: x["count"], reverse=True)
+
+
+def extract_location_comments(
+    texts: list[tuple],
+    location: str,
+    max_snippets: int = 20,
+) -> list[dict]:
+    """Extract all comments from a specific location.
+
+    Args:
+        texts: list of (bvid, title, raw_text, user, source, location) tuples
+        location: the target location (without "IP属地：" prefix)
+        max_snippets: max total snippets
+
+    Returns:
+        list of {"bvid", "title", "count", "snippets"} dicts grouped by video
+    """
+    results: dict[str, dict] = {}
+    total_snippets = 0
+
+    for entry in texts:
+        bvid, title, raw_text = entry[0], entry[1], entry[2]
+        user = entry[3] if len(entry) > 3 else None
+        source = entry[4] if len(entry) > 4 else None
+        loc = entry[5] if len(entry) > 5 else None
+
+        # Clean location by removing "IP属地：" prefix
+        if loc:
+            loc = loc.replace("IP属地：", "").strip()
+
+        if loc != location or not raw_text:
             continue
 
         if bvid not in results:

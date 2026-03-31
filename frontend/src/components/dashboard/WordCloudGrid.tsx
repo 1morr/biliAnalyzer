@@ -14,7 +14,7 @@ type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
 type ContentCloudType = "content" | "title" | "tag" | "subtitle";
 type InteractionCloudMode = "all" | "danmaku" | "comment";
 type InteractionCloudType = "interaction" | "danmaku" | "comment";
-type WordCloudType = "user";
+type WordCloudType = "user" | "location";
 
 interface CloudDef {
   type: WordCloudType;
@@ -49,6 +49,7 @@ const INTERACTION_MODES: { value: InteractionCloudMode; labelKey: string }[] = [
 
 const RIGHT_CLOUDS: CloudDef[] = [
   { type: "user", labelKey: "chart.wordcloud.user" },
+  { type: "location", labelKey: "chart.wordcloud.location" },
 ];
 
 type QueryCloudType = ContentCloudType | InteractionCloudType | WordCloudType;
@@ -126,7 +127,7 @@ function ContentCloudPanel({ queryId }: { queryId: number }) {
         key={`${queryId}-${type}`}
         queryId={queryId}
         type={type}
-        height={456}
+        height={240}
         showVideoBreakdown={true}
       />
     </div>
@@ -157,7 +158,7 @@ function InteractionCloudPanel({ queryId }: { queryId: number }) {
         key={`${queryId}-${type}`}
         queryId={queryId}
         type={type}
-        height={144}
+        height={240}
         showVideoBreakdown={true}
       />
     </div>
@@ -174,7 +175,7 @@ function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCl
         key={`${queryId}-${type}`}
         queryId={queryId}
         type={type}
-        height={144}
+        height={240}
         showVideoBreakdown={true}
       />
     </div>
@@ -185,12 +186,10 @@ export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <ContentCloudPanel queryId={queryId} />
-      <div className="flex flex-col gap-3">
-        <InteractionCloudPanel queryId={queryId} />
-        {RIGHT_CLOUDS.map(({ type, labelKey }) => (
-          <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
-        ))}
-      </div>
+      <InteractionCloudPanel queryId={queryId} />
+      {RIGHT_CLOUDS.map(({ type, labelKey }) => (
+        <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
+      ))}
     </div>
   );
 }

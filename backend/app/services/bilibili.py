@@ -318,7 +318,11 @@ class BilibiliClient:
             if not replies:
                 break
             comments.extend(
-                {"text": r["content"]["message"], "user": r.get("member", {}).get("uname", "")}
+                {
+                    "text": r["content"]["message"],
+                    "user": r.get("member", {}).get("uname", ""),
+                    "location": r.get("reply_control", {}).get("location", "")
+                }
                 for r in replies
             )
         return comments

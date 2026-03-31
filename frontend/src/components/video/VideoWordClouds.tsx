@@ -15,7 +15,7 @@ type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
 type VideoContentCloudType = "content" | "title" | "tag" | "subtitle";
 type InteractionCloudMode = "all" | "danmaku" | "comment";
 type VideoInteractionCloudType = "interaction" | "danmaku" | "comment";
-type VideoCloudType = "user";
+type VideoCloudType = "user" | "location";
 
 interface CloudDef {
   type: VideoCloudType;
@@ -50,6 +50,7 @@ const INTERACTION_MODES: { value: InteractionCloudMode; labelKey: string }[] = [
 
 const CLOUDS: CloudDef[] = [
   { type: "user", labelKey: "chart.wordcloud.user" },
+  { type: "location", labelKey: "chart.wordcloud.location" },
 ];
 
 type VideoResolvedContentMode = ContentCloudMode | "disabled-subtitle";
@@ -184,12 +185,10 @@ export default function VideoWordClouds({ bvid, hasSubtitle }: VideoWordCloudsPr
   return (
     <div className="grid grid-cols-2 gap-3">
       <ContentCloudPanel bvid={bvid} hasSubtitle={hasSubtitle} />
-      <div className="flex flex-col gap-3">
-        <InteractionCloudPanel bvid={bvid} />
-        {CLOUDS.map(({ type, labelKey }) => (
-          <CloudPanel key={type} bvid={bvid} type={type} labelKey={labelKey} />
-        ))}
-      </div>
+      <InteractionCloudPanel bvid={bvid} />
+      {CLOUDS.map(({ type, labelKey }) => (
+        <CloudPanel key={type} bvid={bvid} type={type} labelKey={labelKey} />
+      ))}
     </div>
   );
 }
