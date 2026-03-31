@@ -22,6 +22,7 @@ export default function ScatterChart({ videos }: ScatterChartProps) {
     backgroundColor: "transparent",
     tooltip: {
       trigger: "item",
+      confine: true,
       formatter: (params: { data: { name: string; value: number[] } }) => {
         const d = params.data;
         return `${d.name}<br/>Views: ${d.value[0].toLocaleString()}<br/>IR: ${d.value[1].toFixed(2)}%`;
