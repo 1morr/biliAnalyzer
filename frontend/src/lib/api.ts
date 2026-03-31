@@ -37,7 +37,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sessdata }),
     }),
-  testAi: () => request<{ status: string; message?: string }>("/settings/test-ai", { method: "POST" }),
+  testAi: (data: Pick<SettingsResponse, "ai_base_url" | "ai_api_key" | "ai_model">) =>
+    request<{ status: string; message?: string }>("/settings/test-ai", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getWordFrequency: (queryId: number, type: string) =>
     request<WordFrequencyResponse>(`/queries/${queryId}/wordcloud/${type}`),
   getVideoWordFrequency: (bvid: string, type: string) =>

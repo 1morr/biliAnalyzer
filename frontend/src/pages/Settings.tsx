@@ -155,7 +155,11 @@ export default function Settings() {
     setTestStatus("loading");
     setTestMessage("");
     try {
-      const res = await api.testAi();
+      const res = await api.testAi({
+        ai_base_url: aiBaseUrl,
+        ai_api_key: aiApiKey,
+        ai_model: aiModel,
+      });
       const isOk = res.status === "ok";
       setTestStatus(isOk ? "ok" : "error");
       setTestMessage(isOk ? (res.message || "OK") : (res.message || "Connection failed"));

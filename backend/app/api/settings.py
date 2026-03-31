@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import AppSettings
-from app.schemas.settings import SettingsResponse, SettingsUpdate, SessdataTestRequest
+from app.schemas.settings import SettingsResponse, SettingsUpdate, SessdataTestRequest, AiTestRequest
 from app.core.security import encrypt_value, decrypt_value
 from app.services.bilibili import BilibiliClient
 
@@ -102,26 +102,22 @@ async def test_sessdata_connection(data: SessdataTestRequest, db: AsyncSession =
 
 
 @router.post("/settings/test-ai")
-async def test_ai_connection(db: AsyncSession = Depends(get_db)):
+async def test_ai_connection(data: AiTestRequest, db: AsyncSession = Depends(get_db)):
     from openai import AsyncOpenAI
-    row_url = await db.get(AppSettings, "ai_base_url")
-    row_key = await db.get(AppSettings, "ai_api_key")
-    row_model = await db.get(AppSettings, "ai_model")
 
-    base_url = row_url.value if row_url else DEFAULTS["ai_base_url"]
-    api_key = ""
-    if row_key and row_key.value and row_key.is_sensitive:
-        api_key = decrypt_value(row_key.value)
-    elif row_key:
-        api_key = row_key.value
-    model = row_model.value if row_model else DEFAULTS["ai_model"]
+    base_url = data.ai_base_url if data.ai_base_url is not None else await _get_raw_setting(db, "ai_base_url")
+    api_key = data.ai_api_key
+    model = data.ai_model if data.ai_model is not None else await _get_raw_setting(db, "ai_model")
+
+    if api_key == MASK or api_key is None:
+        api_key = await _get_raw_setting(db, "ai_api_key")
 
     if not api_key:
         return {"status": "error", "message": "API key not configured"}
 
     try:
         client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        resp = await client.chat.completions.create(
+        await client.chat.completions.create(
             model=model, messages=[{"role": "user", "content": "Say OK"}], max_tokens=5
         )
         return {"status": "ok", "model": model}
