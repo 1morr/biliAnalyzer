@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { SparklesIcon, RefreshCwIcon } from "lucide-react";
 import {
   Sheet,
@@ -150,7 +152,11 @@ export default function AIPanel({ queryId, open, onOpenChange }: AIPanelProps) {
           ) : streaming && !text ? (
             <p className="text-muted-foreground animate-pulse">{t("ai.analyzing")}</p>
           ) : text ? (
-            <pre className="whitespace-pre-wrap font-sans leading-relaxed">{text}</pre>
+            <div className="leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_a]:text-primary [&_a]:underline [&_a:hover]:opacity-80 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-border [&_li]:my-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_table]:overflow-hidden [&_table]:text-left [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:bg-muted/50 [&_th]:px-3 [&_th]:py-2 [&_th]:font-medium [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                {text}
+              </ReactMarkdown>
+            </div>
           ) : (
             <p className="text-muted-foreground">{t("ai.analyzing")}</p>
           )}
