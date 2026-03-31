@@ -60,27 +60,37 @@ export default function NewQueryDialog({
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
-  const [hasSessdata, setHasSessdata] = useState<boolean | null>(null);
+  const [sessdataStatus, setSessdataStatus] = useState<"checking" | "valid" | "invalid" | "missing" | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
     let ignore = false;
 
-    async function loadSettings() {
+    async function checkSessdata() {
+      setSessdataStatus("checking");
       try {
         const settings = await api.getSettings();
         if (!ignore) {
-          setHasSessdata(Boolean(settings.sessdata));
+          if (!settings.sessdata) {
+            setSessdataStatus("missing");
+            return;
+          }
+
+          // Test SESSDATA validity
+          const testResult = await api.testSessdata(settings.sessdata);
+          if (!ignore) {
+            setSessdataStatus(testResult.status === "ok" ? "valid" : "invalid");
+          }
         }
       } catch {
         if (!ignore) {
-          setHasSessdata(false);
+          setSessdataStatus("invalid");
         }
       }
     }
 
-    void loadSettings();
+    void checkSessdata();
     return () => {
       ignore = true;
     };
@@ -100,7 +110,7 @@ export default function NewQueryDialog({
     setStartDate("");
     setEndDate("");
     setActivePreset(null);
-    setHasSessdata(null);
+    setSessdataStatus(null);
   }
 
   function handleDialogOpenChange(nextOpen: boolean) {
@@ -136,9 +146,14 @@ export default function NewQueryDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
-          {hasSessdata === false && (
+          {sessdataStatus === "missing" && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
               {t("query.sessdataWarning")}
+            </div>
+          )}
+          {sessdataStatus === "invalid" && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+              {t("query.sessdataInvalid")}
             </div>
           )}
 

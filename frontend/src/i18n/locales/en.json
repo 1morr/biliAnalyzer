@@ -36,6 +36,7 @@
     "uid": "UID",
     "dateRange": "Date Range",
     "sessdataWarning": "SESSDATA is not configured. You can still run the query, but danmaku text and subtitles will be unavailable, so related details and word clouds will be incomplete.",
+    "sessdataInvalid": "SESSDATA has expired. Please reconfigure it in Settings. Danmaku text and subtitles will be unavailable.",
     "preset": { "7d": "Last 7 days", "30d": "Last 30 days", "3m": "Last 3 months", "6m": "Last 6 months", "1y": "Last 1 year", "all": "All time" }
   }
 }
