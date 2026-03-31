@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { WordFrequencyItem, WordDetailResponse } from "@/types";
 import WordCloudChart from "@/components/shared/WordCloudChart";
 import WordDetailPanel from "@/components/shared/WordDetailPanel";
@@ -9,27 +10,60 @@ interface WordCloudGridProps {
   queryId: number;
 }
 
-type WordCloudType = "title" | "tag" | "danmaku" | "comment" | "user" | "subtitle";
+type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
+type ContentCloudType = "content" | "title" | "tag" | "subtitle";
+type InteractionCloudMode = "all" | "danmaku" | "comment";
+type InteractionCloudType = "interaction" | "danmaku" | "comment";
+type WordCloudType = "user";
 
 interface CloudDef {
   type: WordCloudType;
   labelKey: string;
 }
 
-const LEFT_CLOUDS: CloudDef[] = [
-  { type: "title", labelKey: "chart.wordcloud.title" },
-  { type: "tag", labelKey: "chart.wordcloud.tag" },
-  { type: "subtitle", labelKey: "chart.wordcloud.subtitle" },
+const CONTENT_MODE_TO_TYPE: Record<ContentCloudMode, ContentCloudType> = {
+  all: "content",
+  title: "title",
+  tag: "tag",
+  subtitle: "subtitle",
+};
+
+const CONTENT_MODES: { value: ContentCloudMode; labelKey: string }[] = [
+  { value: "all", labelKey: "chart.wordcloud.mode.all" },
+  { value: "title", labelKey: "chart.wordcloud.mode.title" },
+  { value: "tag", labelKey: "chart.wordcloud.mode.tag" },
+  { value: "subtitle", labelKey: "chart.wordcloud.mode.subtitle" },
+];
+
+const INTERACTION_MODE_TO_TYPE: Record<InteractionCloudMode, InteractionCloudType> = {
+  all: "interaction",
+  danmaku: "danmaku",
+  comment: "comment",
+};
+
+const INTERACTION_MODES: { value: InteractionCloudMode; labelKey: string }[] = [
+  { value: "all", labelKey: "chart.wordcloud.mode.all" },
+  { value: "danmaku", labelKey: "chart.wordcloud.mode.danmaku" },
+  { value: "comment", labelKey: "chart.wordcloud.mode.comment" },
 ];
 
 const RIGHT_CLOUDS: CloudDef[] = [
-  { type: "danmaku", labelKey: "chart.wordcloud.danmaku" },
-  { type: "comment", labelKey: "chart.wordcloud.comment" },
   { type: "user", labelKey: "chart.wordcloud.user" },
 ];
 
-function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCloudType; labelKey: string }) {
-  const { t } = useTranslation();
+type QueryCloudType = ContentCloudType | InteractionCloudType | WordCloudType;
+
+function QueryCloudBody({
+  queryId,
+  type,
+  height,
+  showVideoBreakdown,
+}: {
+  queryId: number;
+  type: QueryCloudType;
+  height: number;
+  showVideoBreakdown: boolean;
+}) {
   const [words, setWords] = useState<WordFrequencyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -37,7 +71,6 @@ function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCl
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     api.getWordFrequency(queryId, type)
       .then((d) => { if (active) setWords(d.words); })
       .catch(() => {})
@@ -56,14 +89,92 @@ function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCl
   );
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
-      <WordCloudChart words={words} loading={loading} onWordClick={handleWordClick} height={144} />
+    <>
+      <WordCloudChart words={words} loading={loading} onWordClick={handleWordClick} height={height} />
       <WordDetailPanel
         open={detailOpen}
         onOpenChange={setDetailOpen}
         word={selectedWord}
         fetchDetail={fetchDetail}
+        showVideoBreakdown={showVideoBreakdown}
+      />
+    </>
+  );
+}
+
+function ContentCloudPanel({ queryId }: { queryId: number }) {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<ContentCloudMode>("all");
+  const type = CONTENT_MODE_TO_TYPE[mode];
+
+  const handleModeChange = useCallback((values: string[]) => {
+    if (values.length === 0) return;
+    setMode(values[0] as ContentCloudMode);
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{t("chart.wordcloud.content")}</p>
+        <ToggleGroup value={[mode]} onValueChange={handleModeChange} variant="outline">
+          {CONTENT_MODES.map(({ value, labelKey }) => (
+            <ToggleGroupItem key={value} value={value}>{t(labelKey)}</ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <QueryCloudBody
+        key={`${queryId}-${type}`}
+        queryId={queryId}
+        type={type}
+        height={456}
+        showVideoBreakdown={true}
+      />
+    </div>
+  );
+}
+
+function InteractionCloudPanel({ queryId }: { queryId: number }) {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<InteractionCloudMode>("all");
+  const type = INTERACTION_MODE_TO_TYPE[mode];
+
+  const handleModeChange = useCallback((values: string[]) => {
+    if (values.length === 0) return;
+    setMode(values[0] as InteractionCloudMode);
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{t("chart.wordcloud.interaction")}</p>
+        <ToggleGroup value={[mode]} onValueChange={handleModeChange} variant="outline">
+          {INTERACTION_MODES.map(({ value, labelKey }) => (
+            <ToggleGroupItem key={value} value={value}>{t(labelKey)}</ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <QueryCloudBody
+        key={`${queryId}-${type}`}
+        queryId={queryId}
+        type={type}
+        height={144}
+        showVideoBreakdown={true}
+      />
+    </div>
+  );
+}
+
+function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCloudType; labelKey: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
+      <QueryCloudBody
+        key={`${queryId}-${type}`}
+        queryId={queryId}
+        type={type}
+        height={144}
         showVideoBreakdown={true}
       />
     </div>
@@ -72,18 +183,13 @@ function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCl
 
 export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-3">
-          {LEFT_CLOUDS.map(({ type, labelKey }) => (
-            <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
-          ))}
-        </div>
-        <div className="flex flex-col gap-3">
-          {RIGHT_CLOUDS.map(({ type, labelKey }) => (
-            <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
-          ))}
-        </div>
+    <div className="grid grid-cols-2 gap-3">
+      <ContentCloudPanel queryId={queryId} />
+      <div className="flex flex-col gap-3">
+        <InteractionCloudPanel queryId={queryId} />
+        {RIGHT_CLOUDS.map(({ type, labelKey }) => (
+          <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
+        ))}
       </div>
     </div>
   );
