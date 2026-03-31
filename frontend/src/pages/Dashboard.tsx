@@ -9,6 +9,8 @@ import ViewsTrendChart from "@/components/dashboard/ViewsTrendChart";
 import InteractionChart from "@/components/dashboard/InteractionChart";
 import ScatterChart from "@/components/dashboard/ScatterChart";
 import WordCloudGrid from "@/components/dashboard/WordCloudGrid";
+import PublishTimeHeatmap from "@/components/dashboard/PublishTimeHeatmap";
+import DurationChart from "@/components/dashboard/DurationChart";
 import VideoList from "@/components/dashboard/VideoList";
 import AIPanel from "@/components/dashboard/AIPanel";
 
@@ -154,11 +156,14 @@ export default function Dashboard() {
         {/* Stats cards */}
         {stats && <StatsCards data={stats} />}
 
-        {/* Charts row: trend + interaction */}
+        {/* Charts row: trend + scatter + interaction */}
         {queryId && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-4">
               <ViewsTrendChart queryId={queryId} />
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <ScatterChart videos={allVideos} />
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <InteractionChart queryId={queryId} totalViews={stats?.total_views} />
@@ -166,11 +171,20 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Scatter + Word clouds */}
+        {/* Duration + Heatmap | Word clouds */}
         {queryId && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <ScatterChart videos={allVideos} />
+            <div className="flex flex-col gap-4">
+              {allVideos.length > 0 && (
+                <>
+                  <div className="rounded-xl border border-border bg-card p-4">
+                    <DurationChart videos={allVideos} />
+                  </div>
+                  <div className="rounded-xl border border-border bg-card p-4">
+                    <PublishTimeHeatmap videos={allVideos} />
+                  </div>
+                </>
+              )}
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <WordCloudGrid queryId={queryId} />

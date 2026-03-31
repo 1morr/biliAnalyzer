@@ -4,11 +4,14 @@
   "stats": {
     "totalViews": "总播放量", "likes": "点赞", "coins": "投币",
     "favorites": "收藏", "shares": "分享", "danmaku": "弹幕",
-    "comments": "评论", "videos": "视频数", "interactionRate": "互动率"
+    "comments": "评论", "videos": "视频数", "interactionRate": "互动率",
+    "avgViews": "平均播放", "avgInteraction": "平均互动率", "videoCount": "视频数"
   },
   "chart": {
     "viewsTrend": "播放量趋势", "interaction": "互动数据对比",
-    "scatter": "播放量 vs 互动率", "scatterFormula": "互动率 = (点赞 + 投币 + 收藏 + 分享) / 播放量 × 100%", "wordcloud": { "title": "标题", "tag": "标签", "subtitle": "字幕", "danmaku": "弹幕", "comment": "评论", "content": "内容", "interaction": "互动", "user": "用户", "location": "地区", "detail": "词语详情", "frequency": "出现频次", "perVideo": "视频分布", "contexts": "上下文片段", "occurrences": "出现 {{count}} 次", "inVideos": "出现在 {{count}} 个视频中", "mode": { "all": "所有", "title": "标题", "tag": "标签", "subtitle": "字幕", "danmaku": "弹幕", "comment": "评论" }, "source": { "danmaku": "弹幕", "comment": "评论", "title": "标题", "tag": "标签", "subtitle": "字幕" } }
+    "scatter": "播放量 vs 互动率", "scatterFormula": "互动率 = (点赞 + 投币 + 收藏 + 分享) / 播放量 × 100%",
+    "publishTimeHeatmap": "发布时间影响", "durationImpact": "视频时长影响",
+    "wordcloud": { "title": "标题", "tag": "标签", "subtitle": "字幕", "danmaku": "弹幕", "comment": "评论", "content": "内容", "interaction": "互动", "user": "用户", "location": "地区", "detail": "词语详情", "frequency": "出现频次", "perVideo": "视频分布", "contexts": "上下文片段", "occurrences": "出现 {{count}} 次", "inVideos": "出现在 {{count}} 个视频中", "mode": { "all": "所有", "title": "标题", "tag": "标签", "subtitle": "字幕", "danmaku": "弹幕", "comment": "评论" }, "source": { "danmaku": "弹幕", "comment": "评论", "title": "标题", "tag": "标签", "subtitle": "字幕" } }
   },
   "video": {
     "list": "视频列表", "detail": "视频详情", "sort": "排序",
