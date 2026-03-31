@@ -90,10 +90,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryId]);
 
-  // Poll when fetching
+  // Poll when fetching or fetching_content
   useEffect(() => {
     if (!queryId || !detail) return;
-    if (detail.status === "fetching") {
+    if (detail.status === "fetching" || detail.status === "fetching_content") {
       clearPoll();
       pollRef.current = setInterval(() => fetchDetail(queryId), 3000);
     }
@@ -139,7 +139,7 @@ export default function Dashboard() {
   }
 
   // Still fetching
-  if (detail?.status === "fetching") {
+  if (detail?.status === "fetching" || detail?.status === "fetching_content") {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2">
         <p className="text-blue-500 text-sm animate-pulse">
