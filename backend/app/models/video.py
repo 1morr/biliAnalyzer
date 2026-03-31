@@ -21,7 +21,7 @@ class Video(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     stats: Mapped[list["VideoStats"]] = relationship(back_populates="video", cascade="all, delete-orphan")
-    content: Mapped[list["VideoContent"]] = relationship(back_populates="video", cascade="all, delete-orphan")
+    content: Mapped["VideoContent | None"] = relationship(back_populates="video", cascade="all, delete-orphan", uselist=False)
 
 
 class VideoStats(Base):
@@ -45,7 +45,7 @@ class VideoContent(Base):
     __tablename__ = "video_content"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    bvid: Mapped[str] = mapped_column(Text, ForeignKey("videos.bvid"), nullable=False)
+    bvid: Mapped[str] = mapped_column(Text, ForeignKey("videos.bvid"), nullable=False, unique=True)
     danmakus: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
     comments: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
     subtitle: Mapped[str | None] = mapped_column(Text, nullable=True)

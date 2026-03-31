@@ -98,9 +98,7 @@ async def get_video(bvid: str, db: AsyncSession = Depends(get_db)):
     if not stats:
         raise HTTPException(status_code=404, detail="No stats found")
 
-    content_result = await db.execute(
-        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
-    )
+    content_result = await db.execute(select(VideoContent).where(VideoContent.bvid == bvid))
     content = content_result.scalar_one_or_none()
 
     return VideoDetail(

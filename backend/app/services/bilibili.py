@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import logging
 import random
+import re
 import time
 import urllib.parse
 import uuid
@@ -209,51 +210,293 @@ class BilibiliClient:
         self._user_name_cache[uid] = info["name"]
         return {"uid": uid, "name": info["name"], "avatar_url": info["face"]}
 
-    async def get_video_list(self, uid: int, page: int = 1, page_size: int = 50) -> dict:
-        # Primary: try WBI-signed endpoint
+    def _normalize_video_stub(self, raw: dict, source: str) -> dict | None:
+        bvid = raw.get("bvid") or ""
+        if not bvid:
+            return None
+        title = raw.get("title", "")
+        if isinstance(title, str):
+            title = title.replace('<em class="keyword">', "").replace("</em>", "")
+        published_ts = raw.get("pubdate") or raw.get("created") or raw.get("ctime") or 0
+        published_ts = int(published_ts) if published_ts else 0
+        video = {
+            "bvid": bvid,
+            "title": title,
+            "published_ts": published_ts,
+            "created": published_ts,
+            "source": source,
+        }
+        ctime = raw.get("ctime")
+        if ctime is not None:
+            video["ctime"] = int(ctime)
+        return video
+
+    def _dedupe_video_stubs(self, videos: list[dict]) -> list[dict]:
+        deduped: dict[str, dict] = {}
+        for video in videos:
+            if not video or not video.get("bvid"):
+                continue
+            bvid = video["bvid"]
+            current = deduped.get(bvid)
+            if current is None:
+                deduped[bvid] = dict(video)
+                continue
+            merged = dict(current)
+            for key, value in video.items():
+                if key in {"published_ts", "created", "ctime"}:
+                    continue
+                if not merged.get(key) and value not in (None, ""):
+                    merged[key] = value
+            best_ts = max(
+                int(current.get("published_ts", 0) or 0),
+                int(video.get("published_ts", 0) or 0),
+            )
+            if best_ts:
+                merged["published_ts"] = best_ts
+                merged["created"] = best_ts
+            if "ctime" in current or "ctime" in video:
+                merged["ctime"] = max(
+                    int(current.get("ctime", 0) or 0),
+                    int(video.get("ctime", 0) or 0),
+                )
+            deduped[bvid] = merged
+        return sorted(
+            deduped.values(),
+            key=lambda item: int(item.get("published_ts", 0) or 0),
+            reverse=True,
+        )
+
+    def _slice_video_page(self, videos: list[dict], page: int, page_size: int) -> dict:
+        page = max(page, 1)
+        page_size = max(page_size, 1)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return {"videos": videos[start:end], "total": len(videos), "page": page}
+
+    async def _resolve_user_name(self, uid: int) -> str:
+        name = self._user_name_cache.get(uid)
+        if name:
+            return name
+        return (await self.get_user_info(uid))["name"]
+
+    async def _get_expected_video_total(self, uid: int) -> int | None:
         try:
+            nav = await self._request(f"{self.BASE}/x/space/navnum", params={"mid": uid})
+            return int(nav.get("data", {}).get("video", 0) or 0)
+        except Exception as e:
+            logger.info("navnum lookup failed for uid %s (%s)", uid, e)
+            return None
+
+    def _rec_archives_full_looks_truncated(self, videos: list[dict], page_info: dict) -> bool:
+        total = int(page_info.get("total", 0) or 0)
+        size = int(page_info.get("size", 0) or 0)
+        if total > 0 and not videos:
+            return True
+        return bool(total > len(videos) and len(videos) <= max(size, 1))
+
+    def _is_complete_video_index(self, result: dict, video_count: int, expected_total: int | None) -> bool:
+        if result.get("is_complete_snapshot"):
+            return True
+        result_total = int(result.get("total", 0) or 0)
+        if result_total and video_count >= result_total:
+            return True
+        return bool(expected_total is not None and video_count >= expected_total)
+
+    @staticmethod
+    def _is_live_replay_text(text: str) -> bool:
+        if not isinstance(text, str):
+            return False
+        return bool(re.match(r"^【直播回放】.+\d{4}年\d{2}月\d{2}日\d{2}点场$", text.strip()))
+
+    def _is_live_replay_video(self, title: str, page_parts: list[str]) -> bool:
+        if self._is_live_replay_text(title):
+            return True
+        return any(self._is_live_replay_text(part) for part in page_parts)
+
+    def _filter_live_replay_stubs(self, videos: list[dict]) -> list[dict]:
+        return [video for video in videos if not self._is_live_replay_text(video.get("title", ""))]
+
+    async def get_video_index(self, uid: int) -> dict:
+        expected_total = await self._get_expected_video_total(uid)
+        last_error: Exception | None = None
+        best_result: dict | None = None
+        strategies = [
+            ("rec_archives_full", self._video_index_via_rec_archives_full),
+            ("rec_archives_paged", self._video_index_via_rec_archives_pages),
+            ("arc_search", self._video_index_via_arc_search),
+            ("search", self._video_index_via_search),
+        ]
+        for index, (source, strategy) in enumerate(strategies):
+            try:
+                result = await strategy(uid, expected_total=expected_total)
+                videos = self._filter_live_replay_stubs(
+                    self._dedupe_video_stubs(result.get("videos") or [])
+                )
+                is_complete = self._is_complete_video_index(result, len(videos), expected_total)
+                candidate = {
+                    "videos": videos,
+                    "total": len(videos),
+                    "expected_total": expected_total,
+                    "source": source,
+                    "is_complete_snapshot": is_complete,
+                }
+                if videos or expected_total == 0:
+                    logger.info(
+                        "Video index fetched via %s for uid %s: expected=%s unique=%d complete=%s",
+                        source, uid, expected_total, len(videos), is_complete,
+                    )
+                    if best_result is None or len(videos) > len(best_result["videos"]):
+                        best_result = candidate
+                    if is_complete:
+                        return candidate
+                    if index == len(strategies) - 1:
+                        return best_result or candidate
+                    logger.info(
+                        "%s returned a partial video index for uid %s (%d/%s), trying next fallback",
+                        source, uid, len(videos), expected_total,
+                    )
+                    continue
+                logger.info("%s returned no usable videos for uid %s", source, uid)
+            except Exception as e:
+                last_error = e
+                logger.info("%s failed for uid %s (%s)", source, uid, e)
+        if best_result is not None:
+            return best_result
+        if last_error:
+            raise last_error
+        return {
+            "videos": [],
+            "total": 0,
+            "expected_total": expected_total,
+            "source": "none",
+            "is_complete_snapshot": False,
+        }
+
+    async def get_video_list(self, uid: int, page: int = 1, page_size: int = 50) -> dict:
+        result = await self.get_video_index(uid)
+        return self._slice_video_page(result["videos"], page, page_size)
+
+    async def _video_index_via_rec_archives_full(self, uid: int, expected_total: int | None = None) -> dict:
+        attempts = [
+            {"mid": uid, "keywords": "", "orderby": "senddate", "pn": 0},
+            {"mid": uid, "keywords": "", "pn": 0},
+        ]
+        last_error: Exception | None = None
+        for params in attempts:
+            try:
+                data = await self._request(
+                    f"{self.BASE}/x/series/recArchivesByKeywords",
+                    params=params,
+                )
+                if data.get("code") != 0:
+                    raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
+                payload = data.get("data") or {}
+                videos = [
+                    video for item in (payload.get("archives") or [])
+                    if (video := self._normalize_video_stub(item, "rec_archives_full"))
+                ]
+                if self._rec_archives_full_looks_truncated(videos, payload.get("page") or {}):
+                    raise Exception("recArchivesByKeywords pn=0 returned a truncated page")
+                return {"videos": videos, "is_complete_snapshot": True}
+            except Exception as e:
+                last_error = e
+        if last_error:
+            raise last_error
+        raise Exception("recArchivesByKeywords pn=0 returned no usable data")
+
+    async def _video_index_via_rec_archives_pages(self, uid: int, expected_total: int | None = None) -> dict:
+        videos = []
+        seen: set[str] = set()
+        stagnant_pages = 0
+        for page in range(1, 201):
+            data = await self._request(
+                f"{self.BASE}/x/series/recArchivesByKeywords",
+                params={"mid": uid, "keywords": "", "pn": page},
+            )
+            if data.get("code") != 0:
+                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
+            payload = data.get("data") or {}
+            archives = payload.get("archives") or []
+            if not archives:
+                break
+            added = 0
+            for item in archives:
+                video = self._normalize_video_stub(item, "rec_archives_paged")
+                if not video or video["bvid"] in seen:
+                    continue
+                seen.add(video["bvid"])
+                videos.append(video)
+                added += 1
+            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
+            page_info = payload.get("page") or {}
+            total = int(page_info.get("total", 0) or 0)
+            size = int(page_info.get("size", 0) or len(archives) or 0)
+            current_num = int(page_info.get("num", page) or page)
+            if total and len(seen) >= total:
+                break
+            if total and size and current_num * size >= total:
+                break
+            if stagnant_pages >= 2:
+                break
+        total = int(expected_total or 0)
+        if not total:
+            total = len(videos)
+        return {
+            "videos": videos,
+            "total": total,
+            "is_complete_snapshot": bool(total and len(seen) >= total),
+        }
+
+    async def _video_index_via_arc_search(self, uid: int, expected_total: int | None = None) -> dict:
+        videos = []
+        seen: set[str] = set()
+        page_size = 50
+        stagnant_pages = 0
+        for page in range(1, 201):
             data = await self._request(
                 f"{self.BASE}/x/space/wbi/arc/search",
                 params={"mid": uid, "ps": page_size, "pn": page, "order": "pubdate"},
                 wbi=True,
             )
-            if data.get("code") == 0:
-                vlist = data["data"]["list"]["vlist"]
-                total = data["data"]["page"]["count"]
-                return {"videos": vlist, "total": total, "page": page}
-            logger.info("WBI arc/search returned code %s, falling back to search API", data.get("code"))
-        except Exception as e:
-            logger.info("WBI arc/search failed (%s), falling back to search API", e)
-        return await self._video_list_via_search(uid, page, page_size)
+            if data.get("code") != 0:
+                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
+            payload = data.get("data") or {}
+            vlist = payload.get("list", {}).get("vlist") or []
+            if not vlist:
+                break
+            added = 0
+            for item in vlist:
+                video = self._normalize_video_stub(item, "arc_search")
+                if not video or video["bvid"] in seen:
+                    continue
+                seen.add(video["bvid"])
+                videos.append(video)
+                added += 1
+            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
+            total = int(payload.get("page", {}).get("count", 0) or 0)
+            if total and len(seen) >= total:
+                break
+            if total and page * page_size >= total:
+                break
+            if stagnant_pages >= 2:
+                break
+        total = int(expected_total or 0)
+        if not total:
+            total = len(videos)
+        return {
+            "videos": videos,
+            "total": total,
+            "is_complete_snapshot": bool(total and len(seen) >= total),
+        }
 
-    async def _video_list_via_search(self, uid: int, page: int, page_size: int) -> dict:
-        """Fallback: get video list using the search API + mid filter.
-
-        The search API returns results from ALL users matching the keyword,
-        so we search multiple pages to collect enough videos from the target uid.
-        """
-        # Get user name (from cache or API)
-        name = self._user_name_cache.get(uid)
-        if not name:
-            user_info = await self._request(
-                f"{self.BASE}/x/web-interface/card", params={"mid": uid, "photo": "false"}
-            )
-            name = user_info.get("data", {}).get("card", {}).get("name", "")
-            if name:
-                self._user_name_cache[uid] = name
+    async def _video_index_via_search(self, uid: int, expected_total: int | None = None) -> dict:
+        name = await self._resolve_user_name(uid)
         if not name:
             raise Exception("Cannot resolve user name for search fallback")
-        # Get total count
-        nav = await self._request(
-            f"{self.BASE}/x/space/navnum", params={"mid": uid}
-        )
-        total = nav.get("data", {}).get("video", 0)
-        # Search across multiple pages, collecting only this user's videos
-        # We need to skip (page-1)*page_size matching videos, then return page_size
-        target_skip = (page - 1) * page_size
-        collected = []
-        skipped = 0
-        for search_page in range(1, 51):  # search up to 50 pages
+        videos = []
+        seen: set[str] = set()
+        stagnant_pages = 0
+        for search_page in range(1, 201):
             data = await self._request(
                 f"{self.BASE}/x/web-interface/search/type",
                 params={
@@ -264,23 +507,34 @@ class BilibiliClient:
                     "order": "pubdate",
                 },
             )
+            if data.get("code") != 0:
+                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
             results = data.get("data", {}).get("result") or []
             if not results:
                 break
-            for r in results:
-                if r.get("mid") != uid:
+            added = 0
+            for item in results:
+                if item.get("mid") != uid:
                     continue
-                if skipped < target_skip:
-                    skipped += 1
+                video = self._normalize_video_stub(item, "search")
+                if not video or video["bvid"] in seen:
                     continue
-                collected.append({
-                    "bvid": r.get("bvid", ""),
-                    "title": r.get("title", "").replace('<em class="keyword">', "").replace("</em>", ""),
-                    "created": r.get("pubdate", 0),
-                })
-                if len(collected) >= page_size:
-                    return {"videos": collected, "total": total, "page": page}
-        return {"videos": collected, "total": total, "page": page}
+                seen.add(video["bvid"])
+                videos.append(video)
+                added += 1
+            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
+            if expected_total and len(seen) >= expected_total:
+                break
+            if stagnant_pages >= 10:
+                break
+        total = int(expected_total or 0)
+        if not total:
+            total = len(videos)
+        return {
+            "videos": videos,
+            "total": total,
+            "is_complete_snapshot": bool(total and len(seen) >= total),
+        }
 
     async def get_video_detail(self, bvid: str) -> dict:
         data = await self._request(
@@ -305,13 +559,16 @@ class BilibiliClient:
             pass
         pages = d.get("pages") or []
         page_cids = [{"page": p["page"], "cid": p["cid"], "part": p.get("part", "")} for p in pages]
+        page_parts = [p.get("part", "") for p in pages]
         subtitle_list = d.get("subtitle", {}).get("list") or []
         has_subtitle = len(subtitle_list) > 0
+        title = d["title"]
         return {
             "bvid": d["bvid"], "aid": d["aid"], "cid": d["cid"],
             "page_cids": page_cids,
             "has_subtitle": has_subtitle,
-            "title": d["title"], "description": d.get("desc", ""),
+            "is_live_replay": self._is_live_replay_video(title, page_parts),
+            "title": title, "description": d.get("desc", ""),
             "cover_url": d["pic"], "duration": d["duration"],
             "published_at": d["pubdate"],
             "tags": tags_str,
@@ -337,7 +594,16 @@ class BilibiliClient:
                 {
                     "text": r["content"]["message"],
                     "user": r.get("member", {}).get("uname", ""),
-                    "location": r.get("reply_control", {}).get("location", "")
+                    "location": r.get("reply_control", {}).get("location", ""),
+                    "user_level": r.get("member", {}).get("level_info", {}).get("current_level", 0),
+                    "user_sex": r.get("member", {}).get("sex", "保密"),
+                    "vip_status": r.get("member", {}).get("vip", {}).get("vipStatus", 0),
+                    "vip_type": r.get("member", {}).get("vip", {}).get("vipType", 0),
+                    "official_verify_type": r.get("member", {}).get("official_verify", {}).get("type", -1),
+                    "like": r.get("like", 0),
+                    "reply_count": r.get("rcount", 0),
+                    "up_liked": r.get("up_action", {}).get("like", False),
+                    "up_replied": r.get("up_action", {}).get("reply", False)
                 }
                 for r in replies
             )

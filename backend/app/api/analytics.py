@@ -201,7 +201,7 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
     if not video:
         raise HTTPException(status_code=404)
 
-    content = await _latest_video_content(db, bvid)
+    content = await _video_content(db, bvid)
 
     if wc_type == "user":
         items = _gather_video_normalized_items(video, content)
@@ -238,7 +238,7 @@ async def video_wordcloud_detail(
     if not video:
         raise HTTPException(status_code=404)
 
-    content = await _latest_video_content(db, bvid)
+    content = await _video_content(db, bvid)
 
     if wc_type == "user":
         annotated = _gather_video_annotated_texts(video, content, "interaction")
@@ -257,28 +257,17 @@ async def video_wordcloud_detail(
 # --- Helper functions ---
 
 async def _query_video_content_rows(db: AsyncSession, query_id: int) -> list:
-    """Fetch deduplicated (Video, VideoContent) rows for a query."""
     result = await db.execute(
         select(Video, VideoContent)
         .join(QueryVideo, QueryVideo.bvid == Video.bvid)
         .outerjoin(VideoContent, VideoContent.bvid == Video.bvid)
         .where(QueryVideo.query_id == query_id)
     )
-    rows = result.all()
-    # Deduplicate: keep first occurrence per bvid
-    seen: set[str] = set()
-    deduped = []
-    for video, content in rows:
-        if video.bvid not in seen:
-            seen.add(video.bvid)
-            deduped.append((video, content))
-    return deduped
+    return result.all()
 
 
-async def _latest_video_content(db: AsyncSession, bvid: str) -> VideoContent | None:
-    result = await db.execute(
-        select(VideoContent).where(VideoContent.bvid == bvid).order_by(VideoContent.fetched_at.desc()).limit(1)
-    )
+async def _video_content(db: AsyncSession, bvid: str) -> VideoContent | None:
+    result = await db.execute(select(VideoContent).where(VideoContent.bvid == bvid))
     return result.scalar_one_or_none()
 
 

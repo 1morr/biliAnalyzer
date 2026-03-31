@@ -17,15 +17,44 @@ BATCH_BREAK_MIN = 8  # Min seconds between batches
 BATCH_BREAK_MAX = 15  # Max seconds between batches
 
 
+async def _upsert_video_content(
+    db: AsyncSession,
+    bvid: str,
+    comments: list[dict],
+    danmakus: list[str],
+    subtitle: str,
+) -> None:
+    existing = (
+        await db.execute(select(VideoContent).where(VideoContent.bvid == bvid))
+    ).scalar_one_or_none()
+    comments_json = json.dumps(comments, ensure_ascii=False)
+    danmakus_json = json.dumps(danmakus, ensure_ascii=False)
+    fetched_at = datetime.now(timezone.utc)
+
+    if existing:
+        existing.comments = comments_json
+        existing.danmakus = danmakus_json
+        existing.subtitle = subtitle
+        existing.fetched_at = fetched_at
+        return
+
+    db.add(VideoContent(
+        bvid=bvid,
+        comments=comments_json,
+        danmakus=danmakus_json,
+        subtitle=subtitle,
+        fetched_at=fetched_at,
+    ))
+
+
 async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str | None):
     """Background task: fetch all video data for a query."""
     async with async_session() as db:
         query = await db.get(Query, query_id)
         if not query:
             return
+        client = BilibiliClient(sessdata=sessdata)
         try:
-            client = BilibiliClient(sessdata=sessdata)
-
             # Step 1: Fetch user info
             query.status = "fetching"
             query.progress = "Fetching user info..."
@@ -45,23 +74,15 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             await db.commit()
 
             # Step 2: Fetch video list
+            video_index = await client.get_video_index(uid)
             all_videos = []
-            page = 1
-            while True:
-                result = await client.get_video_list(uid, page=page)
-                for v in result["videos"]:
-                    pub_ts = v.get("created", 0)
-                    pub_date = datetime.fromtimestamp(pub_ts, tz=timezone.utc).date()
-                    if start_date <= pub_date <= end_date:
-                        all_videos.append(v)
-                if page * 50 >= result["total"]:
-                    break
-                # Early exit if we've passed the date range
-                if result["videos"]:
-                    oldest_ts = min(v.get("created", 0) for v in result["videos"])
-                    if datetime.fromtimestamp(oldest_ts, tz=timezone.utc).date() < start_date:
-                        break
-                page += 1
+            for v in video_index["videos"]:
+                pub_ts = int(v.get("published_ts") or v.get("created") or 0)
+                if pub_ts <= 0:
+                    continue
+                pub_date = datetime.fromtimestamp(pub_ts, tz=timezone.utc).date()
+                if start_date <= pub_date <= end_date:
+                    all_videos.append(v)
 
             total = len(all_videos)
             query.video_count = total
@@ -75,9 +96,13 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
 
                 bvid = v["bvid"]
                 detail = await client.get_video_detail(bvid)
+                if detail.get("is_live_replay"):
+                    logger.info("Skipping live replay video %s", bvid)
+                    continue
                 subtitle_flags[bvid] = detail.get("has_subtitle", False)
 
                 # Upsert Video
+                published_at = datetime.fromtimestamp(detail["published_at"], tz=timezone.utc)
                 existing = await db.get(Video, bvid)
                 if not existing:
                     video = Video(
@@ -85,7 +110,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                         uid=uid, title=detail["title"],
                         description=detail["description"],
                         cover_url=detail["cover_url"], duration=detail["duration"],
-                        published_at=datetime.fromtimestamp(detail["published_at"], tz=timezone.utc),
+                        published_at=published_at,
                         tags=detail["tags"],
                     )
                     db.add(video)
@@ -93,6 +118,10 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     existing.aid = detail["aid"]
                     existing.cid = detail["cid"]
                     existing.title = detail["title"]
+                    existing.description = detail["description"]
+                    existing.cover_url = detail["cover_url"]
+                    existing.duration = detail["duration"]
+                    existing.published_at = published_at
                     existing.tags = detail["tags"]
                     existing.updated_at = datetime.now(timezone.utc)
 
@@ -115,9 +144,10 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     logger.info("Batch break after %d videos, pausing for %.1fs", i, break_time)
                     await asyncio.sleep(break_time)
 
-            # Step 4: Fetch content (with batch breaks)
             query.status = "fetching_content"
             await db.commit()
+
+            # Step 4: Fetch content (with batch breaks)
 
             for i, v in enumerate(all_videos, 1):
                 query.progress = f"Fetching content {i}/{total}"
@@ -137,12 +167,13 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                 if has_sub and aid and cid:
                     subtitle = await client.get_subtitle(bvid, aid, cid)
 
-                db.add(VideoContent(
+                await _upsert_video_content(
+                    db=db,
                     bvid=bvid,
-                    comments=json.dumps(comments, ensure_ascii=False),
-                    danmakus=json.dumps(danmakus, ensure_ascii=False),
+                    comments=comments,
+                    danmakus=danmakus,
                     subtitle=subtitle,
-                ))
+                )
                 await db.commit()
 
                 # Batch break: pause after every BATCH_SIZE videos
@@ -180,3 +211,5 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             query.status = "error"
             query.error_message = str(e)
             await db.commit()
+        finally:
+            await client.aclose()
