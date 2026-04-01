@@ -1,5 +1,6 @@
 # backend/app/services/bilibili.py
 import asyncio
+from datetime import datetime, timezone
 import hashlib
 import logging
 import random
@@ -279,6 +280,29 @@ class BilibiliClient:
         end = start + page_size
         return {"videos": videos[start:end], "total": len(videos), "page": page}
 
+    @staticmethod
+    def _video_stub_date(video: dict):
+        published_ts = int(video.get("published_ts") or video.get("created") or 0)
+        if published_ts <= 0:
+            return None
+        return datetime.fromtimestamp(published_ts, tz=timezone.utc).date()
+
+    def _filter_videos_by_date(self, videos: list[dict], start_date, end_date) -> list[dict]:
+        results = []
+        for video in videos:
+            pub_date = self._video_stub_date(video)
+            if pub_date is None:
+                continue
+            if start_date <= pub_date <= end_date:
+                results.append(video)
+        return results
+
+    def _video_date_bounds(self, videos: list[dict]):
+        dates = [pub_date for video in videos if (pub_date := self._video_stub_date(video)) is not None]
+        if not dates:
+            return None, None
+        return max(dates), min(dates)
+
     async def _get_expected_video_total(self, uid: int) -> int | None:
         try:
             nav = await self._request(f"{self.BASE}/x/space/navnum", params={"mid": uid})
@@ -287,18 +311,11 @@ class BilibiliClient:
             logger.info("navnum lookup failed for uid %s (%s)", uid, e)
             return None
 
-    def _rec_archives_full_looks_truncated(self, videos: list[dict], page_info: dict) -> bool:
-        total = int(page_info.get("total", 0) or 0)
-        size = int(page_info.get("size", 0) or 0)
-        if total > 0 and not videos:
+    def _is_complete_video_index(self, result: dict, expected_total: int | None) -> bool:
+        if result.get("is_complete_snapshot"):
             return True
-        return bool(total > len(videos) and len(videos) <= max(size, 1))
-
-    def _is_complete_video_index(self, result: dict, video_count: int, expected_total: int | None) -> bool:
-        result_total = int(result.get("total", 0) or 0)
-        if result_total and video_count >= result_total:
-            return True
-        return bool(expected_total is not None and video_count >= expected_total)
+        fetched_total = len(result.get("videos") or [])
+        return bool(expected_total is not None and fetched_total >= expected_total)
 
     @staticmethod
     def _is_live_replay_text(text: str) -> bool:
@@ -317,13 +334,12 @@ class BilibiliClient:
     async def get_video_index(self, uid: int) -> dict:
         expected_total = await self._get_expected_video_total(uid)
         result = await self._video_index_via_rec_archives_full(uid)
-        videos = self._filter_live_replay_stubs(
-            self._dedupe_video_stubs(result.get("videos") or [])
-        )
-        is_complete = self._is_complete_video_index(result, len(videos), expected_total)
+        raw_videos = self._dedupe_video_stubs(result.get("videos") or [])
+        videos = self._filter_live_replay_stubs(raw_videos)
+        is_complete = self._is_complete_video_index(result, expected_total)
         logger.info(
-            "Video index fetched via rec_archives_full for uid %s: expected=%s unique=%d complete=%s",
-            uid, expected_total, len(videos), is_complete,
+            "Video index fetched via rec_archives_full for uid %s: expected=%s raw=%d unique=%d complete=%s",
+            uid, expected_total, len(raw_videos), len(videos), is_complete,
         )
         return {
             "videos": videos,
@@ -333,37 +349,144 @@ class BilibiliClient:
             "is_complete_snapshot": is_complete,
         }
 
+    async def get_video_index_in_range(self, uid: int, start_date, end_date) -> dict:
+        result = await self._video_index_via_rec_archives_hybrid(uid, start_date, end_date)
+        raw_videos = self._dedupe_video_stubs(result.get("videos") or [])
+        ranged_videos = self._filter_videos_by_date(raw_videos, start_date, end_date)
+        videos = self._filter_live_replay_stubs(ranged_videos)
+        return {
+            "videos": videos,
+            "total": len(videos),
+            "source": "rec_archives_full",
+            "is_complete_snapshot": bool(result.get("is_complete_snapshot")),
+        }
+
     async def get_video_list(self, uid: int, page: int = 1, page_size: int = 50) -> dict:
         result = await self.get_video_index(uid)
         return self._slice_video_page(result["videos"], page, page_size)
 
-    async def _video_index_via_rec_archives_full(self, uid: int) -> dict:
-        attempts = [
-            {"mid": uid, "keywords": "", "orderby": "senddate", "pn": 0},
-            {"mid": uid, "keywords": "", "pn": 0},
+    async def _fetch_rec_archives_page(self, uid: int, pn: int, ps: int | None = None) -> dict:
+        params = {"mid": uid, "keywords": "", "orderby": "senddate", "pn": pn}
+        if ps is not None:
+            params["ps"] = ps
+        data = await self._request(
+            f"{self.BASE}/x/series/recArchivesByKeywords",
+            params=params,
+        )
+        if data.get("code") != 0:
+            raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
+        payload = data.get("data") or {}
+        page_info = payload.get("page") or {}
+        archives = payload.get("archives") or []
+        videos = [
+            video for item in archives
+            if (video := self._normalize_video_stub(item, "rec_archives_full"))
         ]
-        last_error: Exception | None = None
-        for params in attempts:
-            try:
-                data = await self._request(
-                    f"{self.BASE}/x/series/recArchivesByKeywords",
-                    params=params,
-                )
-                if data.get("code") != 0:
-                    raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
-                payload = data.get("data") or {}
-                videos = [
-                    video for item in (payload.get("archives") or [])
-                    if (video := self._normalize_video_stub(item, "rec_archives_full"))
-                ]
-                if self._rec_archives_full_looks_truncated(videos, payload.get("page") or {}):
-                    raise Exception("recArchivesByKeywords pn=0 returned a truncated page")
-                return {"videos": videos, "is_complete_snapshot": True}
-            except Exception as e:
-                last_error = e
-        if last_error:
-            raise last_error
-        raise Exception("recArchivesByKeywords pn=0 returned no usable data")
+        return {
+            "videos": videos,
+            "archives": archives,
+            "page": page_info,
+        }
+
+    async def _video_index_via_rec_archives_hybrid(self, uid: int, start_date, end_date) -> dict:
+        page_size = 100
+        max_pages = 100
+        seed = await self._fetch_rec_archives_page(uid, pn=0)
+        videos = list(seed.get("videos") or [])
+        seed_newest, seed_oldest = self._video_date_bounds(videos)
+
+        if seed_oldest is not None and seed_oldest <= start_date:
+            return {
+                "videos": self._dedupe_video_stubs(videos),
+                "total": len(videos),
+                "is_complete_snapshot": True,
+            }
+
+        seen_page_signatures: set[tuple[str, ...]] = set()
+        is_complete_snapshot = False
+        for page_num in range(1, max_pages + 1):
+            page_result = await self._fetch_rec_archives_page(uid, pn=page_num, ps=page_size)
+            page_videos = page_result.get("videos") or []
+            archives = page_result.get("archives") or []
+            page_info = page_result.get("page") or {}
+            effective_page_size = int(page_info.get("size", page_size) or page_size)
+
+            if not archives:
+                is_complete_snapshot = True
+                break
+
+            page_signature = tuple(video["bvid"] for video in page_videos if video.get("bvid"))
+            if page_signature and page_signature in seen_page_signatures:
+                logger.warning("Duplicate recArchivesByKeywords page detected for uid %s page %s", uid, page_num)
+                break
+            if page_signature:
+                seen_page_signatures.add(page_signature)
+
+            page_newest, page_oldest = self._video_date_bounds(page_videos)
+            if page_oldest is not None and page_oldest > end_date:
+                continue
+
+            videos.extend(page_videos)
+            videos = self._dedupe_video_stubs(videos)
+
+            if page_oldest is not None and page_oldest <= start_date:
+                is_complete_snapshot = True
+                break
+            if 0 < len(archives) < effective_page_size:
+                is_complete_snapshot = True
+                break
+
+        return {
+            "videos": videos,
+            "total": len(videos),
+            "is_complete_snapshot": is_complete_snapshot,
+        }
+
+    async def _video_index_via_rec_archives_full(self, uid: int) -> dict:
+        page_size = 100
+        max_pages = 100
+        videos: list[dict] = []
+        seen_page_signatures: set[tuple[str, ...]] = set()
+        is_complete_snapshot = False
+        result_total = 0
+
+        for page_num in range(1, max_pages + 1):
+            page_result = await self._fetch_rec_archives_page(uid, pn=page_num, ps=page_size)
+            page_videos = page_result.get("videos") or []
+            archives = page_result.get("archives") or []
+            page_info = page_result.get("page") or {}
+            effective_page_size = int(page_info.get("size", page_size) or page_size)
+            result_total = max(result_total, int(page_info.get("total", 0) or 0))
+
+            if not archives:
+                is_complete_snapshot = True
+                break
+
+            page_signature = tuple(video["bvid"] for video in page_videos if video.get("bvid"))
+            if page_signature and page_signature in seen_page_signatures:
+                logger.warning("Duplicate recArchivesByKeywords page detected for uid %s page %s", uid, page_num)
+                break
+            if page_signature:
+                seen_page_signatures.add(page_signature)
+
+            videos.extend(page_videos)
+            deduped_videos = self._dedupe_video_stubs(videos)
+
+            if 0 < len(archives) < effective_page_size:
+                is_complete_snapshot = True
+                videos = deduped_videos
+                break
+            if result_total and len(deduped_videos) >= result_total:
+                is_complete_snapshot = True
+                videos = deduped_videos
+                break
+            videos = deduped_videos
+
+        return {
+            "videos": videos,
+            "total": result_total or len(videos),
+            "is_complete_snapshot": is_complete_snapshot,
+        }
 
     async def get_video_detail(self, bvid: str) -> dict:
         data = await self._request(

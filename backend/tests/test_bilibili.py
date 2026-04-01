@@ -1,5 +1,6 @@
 # backend/tests/test_bilibili.py
 import asyncio
+from datetime import date
 import httpx
 import pytest
 from app.services.bilibili import BilibiliClient
@@ -117,35 +118,29 @@ def test_is_live_replay_video_matches_auto_uploaded_pattern_only():
 
 
 @pytest.mark.asyncio
-async def test_video_index_via_rec_archives_full_prefers_pn0_and_normalizes():
+async def test_get_video_index_in_range_uses_seed_only_when_seed_covers_requested_dates():
     client = BilibiliClient.__new__(BilibiliClient)
     calls = []
 
     async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
         calls.append({"url": url, "params": params, "wbi": wbi})
-        return {
-            "code": 0,
-            "data": {
-                "archives": [
-                    {
-                        "bvid": "BV1",
-                        "title": '<em class="keyword">First</em>',
-                        "pubdate": 200,
-                        "ctime": 150,
-                    },
-                    {
-                        "bvid": "BV2",
-                        "title": "Second",
-                        "ctime": 100,
-                    },
-                ],
-                "page": {"num": 0, "size": 20, "total": 2},
-            },
-        }
+        if params == {"mid": 546195, "keywords": "", "orderby": "senddate", "pn": 0}:
+            return {
+                "code": 0,
+                "data": {
+                    "archives": [
+                        {"bvid": "BV1", "title": "First", "pubdate": 1710028800},
+                        {"bvid": "BV2", "title": "Second", "pubdate": 1709942400},
+                        {"bvid": "BV3", "title": "【直播回放】超短电影回(已报备) 2024年03月08日20点场", "pubdate": 1709856000},
+                    ],
+                    "page": {"num": 0, "size": 20, "total": 999},
+                },
+            }
+        raise AssertionError(f"unexpected params: {params}")
 
     client._request = fake_request
 
-    result = await client._video_index_via_rec_archives_full(546195)
+    result = await client.get_video_index_in_range(546195, date(2024, 3, 8), date(2024, 3, 10))
 
     assert calls == [{
         "url": "https://api.bilibili.com/x/series/recArchivesByKeywords",
@@ -153,24 +148,105 @@ async def test_video_index_via_rec_archives_full_prefers_pn0_and_normalizes():
         "wbi": False,
     }]
     assert result["is_complete_snapshot"] is True
-    assert result["videos"] == [
+    assert [video["bvid"] for video in result["videos"]] == ["BV1", "BV2"]
+    assert result["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_video_index_in_range_uses_seed_and_paginated_fill_with_overlap_dedupe():
+    client = BilibiliClient.__new__(BilibiliClient)
+    calls = []
+
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+        calls.append({"url": url, "params": params, "wbi": wbi})
+        if params == {"mid": 546195, "keywords": "", "orderby": "senddate", "pn": 0}:
+            return {
+                "code": 0,
+                "data": {
+                    "archives": [
+                        {"bvid": "BV1", "title": '<em class="keyword">First</em>', "pubdate": 1710028800, "ctime": 1710028800},
+                        {"bvid": "BV2", "title": "Second", "pubdate": 1709856000, "ctime": 1709856000},
+                    ],
+                    "page": {"num": 0, "size": 20, "total": 999},
+                },
+            }
+        if params == {"mid": 546195, "keywords": "", "orderby": "senddate", "ps": 100, "pn": 1}:
+            return {
+                "code": 0,
+                "data": {
+                    "archives": [
+                        {"bvid": "BV1", "title": "First", "pubdate": 1710028800, "ctime": 1710028800},
+                        {"bvid": "BV2", "title": "Second", "pubdate": 1709856000, "ctime": 1709856000},
+                        {"bvid": "BV3", "title": "Third", "pubdate": 1709251200, "ctime": 1709251200},
+                    ],
+                    "page": {"num": 1, "size": 3, "total": 6},
+                },
+            }
+        raise AssertionError(f"unexpected params: {params}")
+
+    client._request = fake_request
+
+    result = await client.get_video_index_in_range(546195, date(2024, 3, 1), date(2024, 3, 10))
+
+    assert calls == [
         {
-            "bvid": "BV1",
-            "title": "First",
-            "published_ts": 200,
-            "created": 200,
-            "source": "rec_archives_full",
-            "ctime": 150,
+            "url": "https://api.bilibili.com/x/series/recArchivesByKeywords",
+            "params": {"mid": 546195, "keywords": "", "orderby": "senddate", "pn": 0},
+            "wbi": False,
         },
         {
-            "bvid": "BV2",
-            "title": "Second",
-            "published_ts": 100,
-            "created": 100,
-            "source": "rec_archives_full",
-            "ctime": 100,
+            "url": "https://api.bilibili.com/x/series/recArchivesByKeywords",
+            "params": {"mid": 546195, "keywords": "", "orderby": "senddate", "ps": 100, "pn": 1},
+            "wbi": False,
         },
     ]
+    assert result["is_complete_snapshot"] is True
+    assert [video["bvid"] for video in result["videos"]] == ["BV1", "BV2", "BV3"]
+    assert result["videos"][0]["title"] == "First"
+    assert result["total"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_video_index_in_range_stops_after_page_reaches_start_date():
+    client = BilibiliClient.__new__(BilibiliClient)
+    calls = []
+
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+        calls.append(params)
+        if params == {"mid": 546195, "keywords": "", "orderby": "senddate", "pn": 0}:
+            return {
+                "code": 0,
+                "data": {
+                    "archives": [
+                        {"bvid": "BV1", "title": "First", "pubdate": 1710201600},
+                        {"bvid": "BV2", "title": "Second", "pubdate": 1710115200},
+                    ],
+                    "page": {"num": 0, "size": 20, "total": 999},
+                },
+            }
+        if params == {"mid": 546195, "keywords": "", "orderby": "senddate", "ps": 100, "pn": 1}:
+            return {
+                "code": 0,
+                "data": {
+                    "archives": [
+                        {"bvid": "BV3", "title": "Third", "pubdate": 1709942400},
+                        {"bvid": "BV4", "title": "Fourth", "pubdate": 1709164800},
+                    ],
+                    "page": {"num": 1, "size": 2, "total": 999},
+                },
+            }
+        raise AssertionError(f"unexpected params: {params}")
+
+    client._request = fake_request
+
+    result = await client.get_video_index_in_range(546195, date(2024, 2, 29), date(2024, 3, 12))
+
+    assert calls == [
+        {"mid": 546195, "keywords": "", "orderby": "senddate", "pn": 0},
+        {"mid": 546195, "keywords": "", "orderby": "senddate", "ps": 100, "pn": 1},
+    ]
+    assert [video["bvid"] for video in result["videos"]] == ["BV1", "BV2", "BV3", "BV4"]
+    assert result["is_complete_snapshot"] is True
 
 
 @pytest.mark.asyncio
@@ -287,7 +363,7 @@ async def test_request_retries_transient_412_for_wbi_calls_and_refreshes_keys():
 
 
 @pytest.mark.asyncio
-async def test_get_video_index_uses_rec_archives_full_only():
+async def test_get_video_index_keeps_complete_snapshot_true_after_live_replay_filtering():
     client = BilibiliClient.__new__(BilibiliClient)
 
     async def fake_total(uid: int):
@@ -302,6 +378,7 @@ async def test_get_video_index_uses_rec_archives_full_only():
                 {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_full"},
                 {"bvid": "BV3", "title": "【直播回放】超短电影回(已报备) 2026年03月29日20点场", "published_ts": 300, "created": 300, "source": "rec_archives_full"},
             ],
+            "total": 3,
             "is_complete_snapshot": True,
         }
 
@@ -318,8 +395,38 @@ async def test_get_video_index_uses_rec_archives_full_only():
         "total": 2,
         "expected_total": 3,
         "source": "rec_archives_full",
-        "is_complete_snapshot": False,
+        "is_complete_snapshot": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_get_video_index_marks_incomplete_when_fetched_videos_do_not_reach_expected_total():
+    client = BilibiliClient.__new__(BilibiliClient)
+
+    async def fake_total(uid: int):
+        assert uid == 546195
+        return 5
+
+    async def fake_full(uid: int):
+        assert uid == 546195
+        return {
+            "videos": [
+                {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_full"},
+                {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_full"},
+                {"bvid": "BV3", "title": "【直播回放】超短电影回(已报备) 2026年03月29日20点场", "published_ts": 300, "created": 300, "source": "rec_archives_full"},
+            ],
+            "total": 5,
+            "is_complete_snapshot": False,
+        }
+
+    client._get_expected_video_total = fake_total
+    client._video_index_via_rec_archives_full = fake_full
+
+    result = await client.get_video_index(546195)
+
+    assert result["total"] == 2
+    assert result["expected_total"] == 5
+    assert result["is_complete_snapshot"] is False
 
 
 @pytest.mark.asyncio

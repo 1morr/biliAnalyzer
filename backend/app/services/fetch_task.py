@@ -74,7 +74,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             await db.commit()
 
             # Step 2: Fetch video list
-            video_index = await client.get_video_index(uid)
+            video_index = await client.get_video_index_in_range(uid, start_date, end_date)
             all_videos = []
             for v in video_index["videos"]:
                 pub_ts = int(v.get("published_ts") or v.get("created") or 0)
