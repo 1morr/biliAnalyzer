@@ -341,8 +341,7 @@ Implementation reference: the bilibili-API-collect community docs.
 ### Public endpoints (no auth, WBI-signed where noted)
 
 - User info: `https://api.bilibili.com/x/space/wbi/acc/info?mid={uid}` (WBI signed)
-- Video list (preferred): `https://api.bilibili.com/x/series/recArchivesByKeywords?mid={uid}&keywords=&pn=0` (full snapshot, no WBI)
-- Video list fallback chain: paginated `recArchivesByKeywords` → `https://api.bilibili.com/x/space/wbi/arc/search?mid={uid}&ps=50&pn={page}` → search-based fallback
+- Video list: `https://api.bilibili.com/x/series/recArchivesByKeywords?mid={uid}&keywords=&pn=0` (preferred and only list source, no WBI)
 - Video detail (stats + cid + aid): `https://api.bilibili.com/x/web-interface/view?bvid={bvid}` (no WBI)
 - Tags: included in video detail response
 - Comments: `https://api.bilibili.com/x/v2/reply?type=1&oid={aid}&pn={page}` (no WBI, uses `aid` numeric ID)

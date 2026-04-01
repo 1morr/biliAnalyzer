@@ -1,4 +1,6 @@
 # backend/tests/test_bilibili.py
+import asyncio
+import httpx
 import pytest
 from app.services.bilibili import BilibiliClient
 
@@ -172,105 +174,44 @@ async def test_video_index_via_rec_archives_full_prefers_pn0_and_normalizes():
 
 
 @pytest.mark.asyncio
-async def test_get_video_index_falls_back_to_paged_rec_archives():
+async def test_request_retries_transient_412_for_non_wbi_calls():
     client = BilibiliClient.__new__(BilibiliClient)
+    client._fingerprint_ready = True
+    client._rate_limit_count = 0
+    client._base_delay = 1.5
+    client._semaphore = asyncio.Semaphore(1)
+    client._last_request_time = 0
+    sleep_calls = []
+    calls = []
 
-    async def fake_total(uid: int):
-        assert uid == 546195
-        return 2
+    async def fake_sleep(delay: float):
+        sleep_calls.append(delay)
 
-    async def fail_full(uid: int, expected_total: int | None = None):
-        assert expected_total == 2
-        raise Exception("412")
+    async def fake_throttle():
+        return None
 
-    async def ok_paged(uid: int, expected_total: int | None = None):
-        assert uid == 546195
-        assert expected_total == 2
-        return {
-            "videos": [
-                {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_paged"},
-                {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_paged"},
-            ],
-            "total": 2,
-            "is_complete_snapshot": True,
-        }
+    class FakeClient:
+        async def get(self, url: str, params=None):
+            calls.append({"url": url, "params": params})
+            request = httpx.Request("GET", url, params=params)
+            if len(calls) < 3:
+                return httpx.Response(412, request=request)
+            return httpx.Response(200, request=request, json={"code": 0, "data": {"ok": True}})
 
-    async def should_not_run(uid: int, expected_total: int | None = None):
-        raise AssertionError("unexpected fallback")
+    client._ensure_fingerprint = fake_throttle
+    client._throttle = fake_throttle
+    client._client = FakeClient()
 
-    client._get_expected_video_total = fake_total
-    client._video_index_via_rec_archives_full = fail_full
-    client._video_index_via_rec_archives_pages = ok_paged
-    client._video_index_via_arc_search = should_not_run
-    client._video_index_via_search = should_not_run
+    original_sleep = asyncio.sleep
+    asyncio.sleep = fake_sleep
+    try:
+        result = await client._request("https://example.com/test", params={"a": 1})
+    finally:
+        asyncio.sleep = original_sleep
 
-    result = await client.get_video_index(546195)
-
-    assert result == {
-        "videos": [
-            {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_paged"},
-            {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_paged"},
-        ],
-        "total": 2,
-        "expected_total": 2,
-        "source": "rec_archives_paged",
-        "is_complete_snapshot": True,
-    }
-
-
-@pytest.mark.asyncio
-async def test_get_video_index_tries_next_fallback_when_partial():
-    client = BilibiliClient.__new__(BilibiliClient)
-
-    async def fake_total(uid: int):
-        return 3
-
-    async def partial_paged(uid: int, expected_total: int | None = None):
-        return {
-            "videos": [
-                {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_paged"},
-                {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_paged"},
-            ],
-            "total": 3,
-            "is_complete_snapshot": False,
-        }
-
-    async def complete_arc(uid: int, expected_total: int | None = None):
-        return {
-            "videos": [
-                {"bvid": "BV3", "title": "Third", "published_ts": 300, "created": 300, "source": "arc_search"},
-                {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "arc_search"},
-                {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "arc_search"},
-            ],
-            "total": 3,
-            "is_complete_snapshot": False,
-        }
-
-    async def fail_full(uid: int, expected_total: int | None = None):
-        raise Exception("412")
-
-    async def should_not_run(uid: int, expected_total: int | None = None):
-        raise AssertionError("unexpected fallback")
-
-    client._get_expected_video_total = fake_total
-    client._video_index_via_rec_archives_full = fail_full
-    client._video_index_via_rec_archives_pages = partial_paged
-    client._video_index_via_arc_search = complete_arc
-    client._video_index_via_search = should_not_run
-
-    result = await client.get_video_index(546195)
-
-    assert result == {
-        "videos": [
-            {"bvid": "BV3", "title": "Third", "published_ts": 300, "created": 300, "source": "arc_search"},
-            {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "arc_search"},
-            {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "arc_search"},
-        ],
-        "total": 3,
-        "expected_total": 3,
-        "source": "arc_search",
-        "is_complete_snapshot": True,
-    }
+    assert result == {"code": 0, "data": {"ok": True}}
+    assert len(calls) == 3
+    assert len(sleep_calls) == 2
 
 
 def test_filter_live_replay_stubs_removes_auto_uploaded_replays():
@@ -285,62 +226,98 @@ def test_filter_live_replay_stubs_removes_auto_uploaded_replays():
 
 
 @pytest.mark.asyncio
-async def test_get_video_index_keeps_best_partial_result_on_last_fallback():
+async def test_request_retries_transient_412_for_wbi_calls_and_refreshes_keys():
+    client = BilibiliClient.__new__(BilibiliClient)
+    client._fingerprint_ready = True
+    client._rate_limit_count = 0
+    client._base_delay = 1.5
+    client._semaphore = asyncio.Semaphore(1)
+    client._last_request_time = 0
+    client._img_key = "img"
+    client._sub_key = "sub"
+    client._wbi_keys_ts = 0
+    sleep_calls = []
+    refresh_calls = []
+    signed_params = []
+    calls = []
+
+    async def fake_sleep(delay: float):
+        sleep_calls.append(delay)
+
+    async def fake_noop():
+        return None
+
+    async def fake_refresh():
+        refresh_calls.append(True)
+        client._img_key = "img"
+        client._sub_key = "sub"
+        client._wbi_keys_ts = 9999999999
+
+    def fake_sign(params: dict) -> dict:
+        signed = {**params, "w_rid": "rid", "wts": 1}
+        signed_params.append(signed)
+        return signed
+
+    class FakeClient:
+        async def get(self, url: str, params=None):
+            calls.append({"url": url, "params": params})
+            request = httpx.Request("GET", url, params=params)
+            if len(calls) < 3:
+                return httpx.Response(412, request=request)
+            return httpx.Response(200, request=request, json={"code": 0, "data": {"ok": True}})
+
+    client._ensure_fingerprint = fake_noop
+    client._throttle = fake_noop
+    client._refresh_wbi_keys = fake_refresh
+    client._sign_wbi = fake_sign
+    client._client = FakeClient()
+
+    original_sleep = asyncio.sleep
+    asyncio.sleep = fake_sleep
+    try:
+        result = await client._request("https://example.com/wbi", params={"mid": 1}, wbi=True)
+    finally:
+        asyncio.sleep = original_sleep
+
+    assert result == {"code": 0, "data": {"ok": True}}
+    assert len(calls) == 3
+    assert len(refresh_calls) >= 1
+    assert len(signed_params) == 3
+    assert len(sleep_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_video_index_uses_rec_archives_full_only():
     client = BilibiliClient.__new__(BilibiliClient)
 
     async def fake_total(uid: int):
-        return 4
+        assert uid == 546195
+        return 3
 
-    async def fail_full(uid: int, expected_total: int | None = None):
-        raise Exception("412")
-
-    async def partial_paged(uid: int, expected_total: int | None = None):
+    async def fake_full(uid: int):
+        assert uid == 546195
         return {
             "videos": [
-                {"bvid": "BV4", "title": "Fourth", "published_ts": 400, "created": 400, "source": "rec_archives_paged"},
-                {"bvid": "BV3", "title": "Third", "published_ts": 300, "created": 300, "source": "rec_archives_paged"},
-                {"bvid": "BV2", "title": "Second", "published_ts": 200, "created": 200, "source": "rec_archives_paged"},
+                {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_full"},
+                {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_full"},
+                {"bvid": "BV3", "title": "【直播回放】超短电影回(已报备) 2026年03月29日20点场", "published_ts": 300, "created": 300, "source": "rec_archives_full"},
             ],
-            "total": 4,
-            "is_complete_snapshot": False,
-        }
-
-    async def smaller_arc(uid: int, expected_total: int | None = None):
-        return {
-            "videos": [
-                {"bvid": "BV2", "title": "Second", "published_ts": 200, "created": 200, "source": "arc_search"},
-                {"bvid": "BV1", "title": "First", "published_ts": 100, "created": 100, "source": "arc_search"},
-            ],
-            "total": 4,
-            "is_complete_snapshot": False,
-        }
-
-    async def smallest_search(uid: int, expected_total: int | None = None):
-        return {
-            "videos": [
-                {"bvid": "BV1", "title": "First", "published_ts": 100, "created": 100, "source": "search"},
-            ],
-            "total": 4,
-            "is_complete_snapshot": False,
+            "is_complete_snapshot": True,
         }
 
     client._get_expected_video_total = fake_total
-    client._video_index_via_rec_archives_full = fail_full
-    client._video_index_via_rec_archives_pages = partial_paged
-    client._video_index_via_arc_search = smaller_arc
-    client._video_index_via_search = smallest_search
+    client._video_index_via_rec_archives_full = fake_full
 
     result = await client.get_video_index(546195)
 
     assert result == {
         "videos": [
-            {"bvid": "BV4", "title": "Fourth", "published_ts": 400, "created": 400, "source": "rec_archives_paged"},
-            {"bvid": "BV3", "title": "Third", "published_ts": 300, "created": 300, "source": "rec_archives_paged"},
-            {"bvid": "BV2", "title": "Second", "published_ts": 200, "created": 200, "source": "rec_archives_paged"},
+            {"bvid": "BV1", "title": "First", "published_ts": 200, "created": 200, "source": "rec_archives_full"},
+            {"bvid": "BV2", "title": "Second", "published_ts": 100, "created": 100, "source": "rec_archives_full"},
         ],
-        "total": 3,
-        "expected_total": 4,
-        "source": "rec_archives_paged",
+        "total": 2,
+        "expected_total": 3,
+        "source": "rec_archives_full",
         "is_complete_snapshot": False,
     }
 

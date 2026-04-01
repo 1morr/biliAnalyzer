@@ -45,7 +45,6 @@ class BilibiliClient:
         self._sub_key: str | None = None
         self._wbi_keys_ts: float = 0
         self._fingerprint_ready = False
-        self._user_name_cache: dict[int, str] = {}
         self._semaphore = asyncio.Semaphore(1)  # rate limit: 1 concurrent request
         self._last_request_time: float = 0
         self._rate_limit_count: int = 0  # track -799 occurrences
@@ -123,21 +122,28 @@ class BilibiliClient:
 
     async def _request(self, url: str, params: dict | None = None, wbi: bool = False) -> dict:
         await self._ensure_fingerprint()
-        raw_params = params
+        raw_params = params or {}
         max_retries = 3
+        data: dict | None = None
         for attempt in range(max_retries):
             await self._throttle()
+            request_params = raw_params
             if wbi:
                 if not self._img_key or time.time() - self._wbi_keys_ts > self._WBI_KEY_TTL:
                     await self._refresh_wbi_keys()
-                params = self._sign_wbi(raw_params or {})
-            resp = await self._client.get(url, params=params)
-            # Retry with refreshed keys on 412
-            if resp.status_code == 412 and wbi:
-                await self._refresh_wbi_keys()
-                params = self._sign_wbi(raw_params or {})
-                await self._throttle()
-                resp = await self._client.get(url, params=params)
+                request_params = self._sign_wbi(raw_params)
+            resp = await self._client.get(url, params=request_params)
+            if resp.status_code == 412:
+                if wbi:
+                    await self._refresh_wbi_keys()
+                if attempt < max_retries - 1:
+                    delay = 1 + attempt * 2 + random.uniform(0, 0.5)
+                    logger.warning(
+                        "Received HTTP 412 from %s, retrying in %.1fs (attempt %d/%d)",
+                        url, delay, attempt + 1, max_retries,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
             resp.raise_for_status()
             data = resp.json()
             # Retry on rate limit (-799) with exponential backoff
@@ -158,7 +164,9 @@ class BilibiliClient:
                 if self._rate_limit_count > 0:
                     self._rate_limit_count = max(0, self._rate_limit_count - 1)
             return data
-        return data  # return last response if all retries exhausted
+        if data is not None:
+            return data
+        raise Exception(f"Request to {url} exhausted retries without data")
 
     async def _refresh_wbi_keys(self):
         await self._ensure_fingerprint()
@@ -193,7 +201,6 @@ class BilibiliClient:
             )
             if data.get("code") == 0:
                 card = data["data"]["card"]
-                self._user_name_cache[uid] = card["name"]
                 return {"uid": uid, "name": card["name"], "avatar_url": card["face"]}
             logger.info("card API returned code %s, falling back to acc/info", data.get("code"))
         except Exception as e:
@@ -207,7 +214,6 @@ class BilibiliClient:
         if data.get("code") != 0:
             raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
         info = data["data"]
-        self._user_name_cache[uid] = info["name"]
         return {"uid": uid, "name": info["name"], "avatar_url": info["face"]}
 
     def _normalize_video_stub(self, raw: dict, source: str) -> dict | None:
@@ -273,12 +279,6 @@ class BilibiliClient:
         end = start + page_size
         return {"videos": videos[start:end], "total": len(videos), "page": page}
 
-    async def _resolve_user_name(self, uid: int) -> str:
-        name = self._user_name_cache.get(uid)
-        if name:
-            return name
-        return (await self.get_user_info(uid))["name"]
-
     async def _get_expected_video_total(self, uid: int) -> int | None:
         try:
             nav = await self._request(f"{self.BASE}/x/space/navnum", params={"mid": uid})
@@ -295,8 +295,6 @@ class BilibiliClient:
         return bool(total > len(videos) and len(videos) <= max(size, 1))
 
     def _is_complete_video_index(self, result: dict, video_count: int, expected_total: int | None) -> bool:
-        if result.get("is_complete_snapshot"):
-            return True
         result_total = int(result.get("total", 0) or 0)
         if result_total and video_count >= result_total:
             return True
@@ -318,65 +316,28 @@ class BilibiliClient:
 
     async def get_video_index(self, uid: int) -> dict:
         expected_total = await self._get_expected_video_total(uid)
-        last_error: Exception | None = None
-        best_result: dict | None = None
-        strategies = [
-            ("rec_archives_full", self._video_index_via_rec_archives_full),
-            ("rec_archives_paged", self._video_index_via_rec_archives_pages),
-            ("arc_search", self._video_index_via_arc_search),
-            ("search", self._video_index_via_search),
-        ]
-        for index, (source, strategy) in enumerate(strategies):
-            try:
-                result = await strategy(uid, expected_total=expected_total)
-                videos = self._filter_live_replay_stubs(
-                    self._dedupe_video_stubs(result.get("videos") or [])
-                )
-                is_complete = self._is_complete_video_index(result, len(videos), expected_total)
-                candidate = {
-                    "videos": videos,
-                    "total": len(videos),
-                    "expected_total": expected_total,
-                    "source": source,
-                    "is_complete_snapshot": is_complete,
-                }
-                if videos or expected_total == 0:
-                    logger.info(
-                        "Video index fetched via %s for uid %s: expected=%s unique=%d complete=%s",
-                        source, uid, expected_total, len(videos), is_complete,
-                    )
-                    if best_result is None or len(videos) > len(best_result["videos"]):
-                        best_result = candidate
-                    if is_complete:
-                        return candidate
-                    if index == len(strategies) - 1:
-                        return best_result or candidate
-                    logger.info(
-                        "%s returned a partial video index for uid %s (%d/%s), trying next fallback",
-                        source, uid, len(videos), expected_total,
-                    )
-                    continue
-                logger.info("%s returned no usable videos for uid %s", source, uid)
-            except Exception as e:
-                last_error = e
-                logger.info("%s failed for uid %s (%s)", source, uid, e)
-        if best_result is not None:
-            return best_result
-        if last_error:
-            raise last_error
+        result = await self._video_index_via_rec_archives_full(uid)
+        videos = self._filter_live_replay_stubs(
+            self._dedupe_video_stubs(result.get("videos") or [])
+        )
+        is_complete = self._is_complete_video_index(result, len(videos), expected_total)
+        logger.info(
+            "Video index fetched via rec_archives_full for uid %s: expected=%s unique=%d complete=%s",
+            uid, expected_total, len(videos), is_complete,
+        )
         return {
-            "videos": [],
-            "total": 0,
+            "videos": videos,
+            "total": len(videos),
             "expected_total": expected_total,
-            "source": "none",
-            "is_complete_snapshot": False,
+            "source": "rec_archives_full",
+            "is_complete_snapshot": is_complete,
         }
 
     async def get_video_list(self, uid: int, page: int = 1, page_size: int = 50) -> dict:
         result = await self.get_video_index(uid)
         return self._slice_video_page(result["videos"], page, page_size)
 
-    async def _video_index_via_rec_archives_full(self, uid: int, expected_total: int | None = None) -> dict:
+    async def _video_index_via_rec_archives_full(self, uid: int) -> dict:
         attempts = [
             {"mid": uid, "keywords": "", "orderby": "senddate", "pn": 0},
             {"mid": uid, "keywords": "", "pn": 0},
@@ -403,138 +364,6 @@ class BilibiliClient:
         if last_error:
             raise last_error
         raise Exception("recArchivesByKeywords pn=0 returned no usable data")
-
-    async def _video_index_via_rec_archives_pages(self, uid: int, expected_total: int | None = None) -> dict:
-        videos = []
-        seen: set[str] = set()
-        stagnant_pages = 0
-        for page in range(1, 201):
-            data = await self._request(
-                f"{self.BASE}/x/series/recArchivesByKeywords",
-                params={"mid": uid, "keywords": "", "pn": page},
-            )
-            if data.get("code") != 0:
-                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
-            payload = data.get("data") or {}
-            archives = payload.get("archives") or []
-            if not archives:
-                break
-            added = 0
-            for item in archives:
-                video = self._normalize_video_stub(item, "rec_archives_paged")
-                if not video or video["bvid"] in seen:
-                    continue
-                seen.add(video["bvid"])
-                videos.append(video)
-                added += 1
-            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
-            page_info = payload.get("page") or {}
-            total = int(page_info.get("total", 0) or 0)
-            size = int(page_info.get("size", 0) or len(archives) or 0)
-            current_num = int(page_info.get("num", page) or page)
-            if total and len(seen) >= total:
-                break
-            if total and size and current_num * size >= total:
-                break
-            if stagnant_pages >= 2:
-                break
-        total = int(expected_total or 0)
-        if not total:
-            total = len(videos)
-        return {
-            "videos": videos,
-            "total": total,
-            "is_complete_snapshot": bool(total and len(seen) >= total),
-        }
-
-    async def _video_index_via_arc_search(self, uid: int, expected_total: int | None = None) -> dict:
-        videos = []
-        seen: set[str] = set()
-        page_size = 50
-        stagnant_pages = 0
-        for page in range(1, 201):
-            data = await self._request(
-                f"{self.BASE}/x/space/wbi/arc/search",
-                params={"mid": uid, "ps": page_size, "pn": page, "order": "pubdate"},
-                wbi=True,
-            )
-            if data.get("code") != 0:
-                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
-            payload = data.get("data") or {}
-            vlist = payload.get("list", {}).get("vlist") or []
-            if not vlist:
-                break
-            added = 0
-            for item in vlist:
-                video = self._normalize_video_stub(item, "arc_search")
-                if not video or video["bvid"] in seen:
-                    continue
-                seen.add(video["bvid"])
-                videos.append(video)
-                added += 1
-            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
-            total = int(payload.get("page", {}).get("count", 0) or 0)
-            if total and len(seen) >= total:
-                break
-            if total and page * page_size >= total:
-                break
-            if stagnant_pages >= 2:
-                break
-        total = int(expected_total or 0)
-        if not total:
-            total = len(videos)
-        return {
-            "videos": videos,
-            "total": total,
-            "is_complete_snapshot": bool(total and len(seen) >= total),
-        }
-
-    async def _video_index_via_search(self, uid: int, expected_total: int | None = None) -> dict:
-        name = await self._resolve_user_name(uid)
-        if not name:
-            raise Exception("Cannot resolve user name for search fallback")
-        videos = []
-        seen: set[str] = set()
-        stagnant_pages = 0
-        for search_page in range(1, 201):
-            data = await self._request(
-                f"{self.BASE}/x/web-interface/search/type",
-                params={
-                    "search_type": "video",
-                    "keyword": name,
-                    "page": search_page,
-                    "page_size": 50,
-                    "order": "pubdate",
-                },
-            )
-            if data.get("code") != 0:
-                raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
-            results = data.get("data", {}).get("result") or []
-            if not results:
-                break
-            added = 0
-            for item in results:
-                if item.get("mid") != uid:
-                    continue
-                video = self._normalize_video_stub(item, "search")
-                if not video or video["bvid"] in seen:
-                    continue
-                seen.add(video["bvid"])
-                videos.append(video)
-                added += 1
-            stagnant_pages = stagnant_pages + 1 if added == 0 else 0
-            if expected_total and len(seen) >= expected_total:
-                break
-            if stagnant_pages >= 10:
-                break
-        total = int(expected_total or 0)
-        if not total:
-            total = len(videos)
-        return {
-            "videos": videos,
-            "total": total,
-            "is_complete_snapshot": bool(total and len(seen) >= total),
-        }
 
     async def get_video_detail(self, bvid: str) -> dict:
         data = await self._request(
