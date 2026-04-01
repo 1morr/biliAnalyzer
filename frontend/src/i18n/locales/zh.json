@@ -21,6 +21,8 @@
     "engagementTip": "百分比表示本视频相对于查询内所有视频平均值的差异",
     "thisVideo": "本视频", "average": "平均",
     "viewsLabel": "播放", "likesLabel": "点赞", "coinsLabel": "投币", "favsLabel": "收藏",
+    "searchPlaceholder": "搜索标题 / BV / 标签",
+    "toggleOrder": "切换排序方向",
     "previous": "上一页", "next": "下一页", "pageOf": "第 {{page}} 页，共 {{total}} 页"
   },
   "ai": { "title": "AI 分析", "analyze": "AI 分析", "regenerate": "重新生成", "notConfigured": "请先配置AI", "analyzing": "分析中..." },

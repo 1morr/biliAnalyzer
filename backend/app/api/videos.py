@@ -1,6 +1,7 @@
 import math
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import Video, VideoStats, VideoContent, QueryVideo
@@ -29,7 +30,10 @@ SORT_FIELDS = {
     "coins": VideoStats.coins, "favorites": VideoStats.favorites,
     "shares": VideoStats.shares, "danmaku": VideoStats.danmaku_count,
     "comments": VideoStats.comment_count, "published_at": Video.published_at,
+    "duration": Video.duration,
 }
+
+VIDEO_SORT_FIELDS = {"published_at", "duration"}
 
 
 @router.get("/queries/{query_id}/videos", response_model=PaginatedVideos)
@@ -39,8 +43,11 @@ async def list_videos(
     order: str = "desc",
     page: int = 1,
     page_size: int = QueryParam(default=20, le=100),
+    search: str = QueryParam(default="", max_length=200),
     db: AsyncSession = Depends(get_db),
 ):
+    search_text = search.strip()
+
     # Build query: join Video + latest VideoStats via QueryVideo
     base = (
         select(Video, VideoStats)
@@ -48,6 +55,15 @@ async def list_videos(
         .join(VideoStats, VideoStats.bvid == Video.bvid)
         .where(QueryVideo.query_id == query_id)
     )
+    if search_text:
+        pattern = f"%{search_text}%"
+        base = base.where(
+            or_(
+                Video.title.ilike(pattern),
+                Video.bvid.ilike(pattern),
+                Video.tags.ilike(pattern),
+            )
+        )
     result = await db.execute(base)
     rows = result.all()
 
@@ -61,8 +77,11 @@ async def list_videos(
 
     # Sort
     sort_key = sort_by if sort_by in SORT_FIELDS else "views"
-    if sort_key == "published_at":
-        items.sort(key=lambda x: x[0].published_at or 0, reverse=(order == "desc"))
+    if sort_key in VIDEO_SORT_FIELDS:
+        items.sort(
+            key=lambda x: getattr(x[0], sort_key) or (datetime.min if sort_key == "published_at" else 0),
+            reverse=(order == "desc"),
+        )
     else:
         field_name = sort_key if sort_key != "danmaku" else "danmaku_count"
         field_name = field_name if field_name != "comments" else "comment_count"

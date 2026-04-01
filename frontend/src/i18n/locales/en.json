@@ -21,6 +21,8 @@
     "engagementTip": "Percentage shows this video's difference from the average of all videos in the query",
     "thisVideo": "This Video", "average": "Average",
     "viewsLabel": "Views", "likesLabel": "Likes", "coinsLabel": "Coins", "favsLabel": "Favs",
+    "searchPlaceholder": "Search title / BV / tags",
+    "toggleOrder": "Toggle sort order",
     "previous": "Previous", "next": "Next", "pageOf": "Page {{page}} of {{total}}"
   },
   "ai": { "title": "AI Analysis", "analyze": "AI Analysis", "regenerate": "Regenerate", "notConfigured": "Please configure AI first", "analyzing": "Analyzing..." },
