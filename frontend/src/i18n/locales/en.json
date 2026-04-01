@@ -11,7 +11,7 @@
     "viewsTrend": "Views Trend", "interaction": "Interaction Comparison",
     "scatter": "Views vs Interaction Rate", "scatterFormula": "IR = (Likes + Coins + Favorites + Shares) / Views × 100%",
     "publishTimeHeatmap": "Publish Time Impact", "durationImpact": "Duration Impact",
-    "wordcloud": { "title": "Title", "tag": "Tags", "subtitle": "Subtitle", "danmaku": "Danmaku", "comment": "Comments", "content": "Content", "interaction": "Interaction", "user": "Users", "location": "Location", "detail": "Word Detail", "frequency": "Frequency", "perVideo": "Per-Video Breakdown", "contexts": "Context Snippets", "occurrences": "{{count}} occurrences", "inVideos": "Found in {{count}} videos", "mode": { "all": "All", "title": "Title", "tag": "Tag", "subtitle": "Subtitle", "danmaku": "Danmaku", "comment": "Comment" }, "source": { "danmaku": "Danmaku", "comment": "Comment", "title": "Title", "tag": "Tag", "subtitle": "Subtitle" } }
+    "wordcloud": { "title": "Title", "tag": "Tags", "subtitle": "Subtitle", "danmaku": "Danmaku", "comment": "Comments", "content": "Content", "interaction": "Interaction", "user": "Users", "location": "Location", "detail": "Word Detail", "frequency": "Frequency", "perVideo": "Per-Video Breakdown", "contexts": "Context Snippets", "occurrences": "{{count}} occurrences", "uniqueUsers": "{{count}} unique users", "inVideos": "Found in {{count}} videos", "mode": { "all": "All", "title": "Title", "tag": "Tag", "subtitle": "Subtitle", "danmaku": "Danmaku", "comment": "Comment" }, "source": { "danmaku": "Danmaku", "comment": "Comment", "title": "Title", "tag": "Tag", "subtitle": "Subtitle" } }
   },
   "video": {
     "list": "Videos", "detail": "Video Detail", "sort": "Sort",

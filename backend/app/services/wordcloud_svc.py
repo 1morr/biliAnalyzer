@@ -61,14 +61,32 @@ def compute_user_frequencies(items: list[dict], limit: int = 100) -> list[dict]:
     return [{"name": user, "value": count} for user, count in counter.most_common(limit)]
 
 
+def _normalize_location(location: str | None) -> str | None:
+    """Normalize location strings for aggregation and matching."""
+    if not location:
+        return None
+    normalized = location.replace("IP属地：", "").strip()
+    return normalized or None
+
+
 def compute_location_frequencies(items: list[dict], limit: int = 100) -> list[dict]:
-    """Count location frequencies from normalized items [{"text", "user", "location"}, ...]."""
-    locations = [item["location"] for item in items if item.get("location")]
-    if not locations:
+    """Count unique-user location frequencies from normalized items."""
+    seen_user_locations: set[tuple[str, str]] = set()
+    counter: Counter[str] = Counter()
+    for item in items:
+        user = item.get("user")
+        location = _normalize_location(item.get("location"))
+        if not user or not location:
+            continue
+        user_location = (user, location)
+        if user_location in seen_user_locations:
+            continue
+        seen_user_locations.add(user_location)
+        counter[location] += 1
+
+    if not counter:
         return []
-    # Remove "IP属地：" prefix if present
-    cleaned_locations = [loc.replace("IP属地：", "").strip() for loc in locations]
-    counter = Counter(cleaned_locations)
+
     return [{"name": location, "value": count} for location, count in counter.most_common(limit)]
 
 
@@ -179,18 +197,11 @@ def extract_location_comments(
     location: str,
     max_snippets: int = 20,
 ) -> list[dict]:
-    """Extract all comments from a specific location.
-
-    Args:
-        texts: list of (bvid, title, raw_text, user, source, location) tuples
-        location: the target location (without "IP属地：" prefix)
-        max_snippets: max total snippets
-
-    Returns:
-        list of {"bvid", "title", "count", "snippets"} dicts grouped by video
-    """
+    """Extract representative comments for unique users from a specific location."""
+    location = _normalize_location(location)
     results: dict[str, dict] = {}
     total_snippets = 0
+    seen_users: set[str] = set()
 
     for entry in texts:
         bvid, title, raw_text = entry[0], entry[1], entry[2]
@@ -198,12 +209,11 @@ def extract_location_comments(
         source = entry[4] if len(entry) > 4 else None
         loc = entry[5] if len(entry) > 5 else None
 
-        # Clean location by removing "IP属地：" prefix
-        if loc:
-            loc = loc.replace("IP属地：", "").strip()
+        loc = _normalize_location(loc)
 
-        if loc != location or not raw_text:
+        if not user or loc != location or not raw_text or user in seen_users:
             continue
+        seen_users.add(user)
 
         if bvid not in results:
             results[bvid] = {"bvid": bvid, "title": title, "count": 0, "snippets": []}

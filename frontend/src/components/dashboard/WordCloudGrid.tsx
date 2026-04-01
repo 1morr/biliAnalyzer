@@ -98,6 +98,7 @@ function QueryCloudBody({
         word={selectedWord}
         fetchDetail={fetchDetail}
         showVideoBreakdown={showVideoBreakdown}
+        countLabelMode={type === "location" ? "uniqueUsers" : "occurrences"}
       />
     </>
   );

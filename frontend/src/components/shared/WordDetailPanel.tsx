@@ -11,12 +11,15 @@ import {
 } from "@/components/ui/sheet";
 import type { WordDetailResponse, SnippetItem } from "@/types";
 
+type CountLabelMode = "occurrences" | "uniqueUsers";
+
 interface WordDetailPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   word: string | null;
   fetchDetail: (word: string) => Promise<WordDetailResponse>;
   showVideoBreakdown?: boolean;
+  countLabelMode?: CountLabelMode;
 }
 
 function highlightWord(text: string, word: string) {
@@ -36,8 +39,10 @@ export default function WordDetailPanel({
   word,
   fetchDetail,
   showVideoBreakdown = true,
+  countLabelMode = "occurrences",
 }: WordDetailPanelProps) {
   const { t } = useTranslation();
+  const countLabelKey = countLabelMode === "uniqueUsers" ? "chart.wordcloud.uniqueUsers" : "chart.wordcloud.occurrences";
   const [data, setData] = useState<WordDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +78,7 @@ export default function WordDetailPanel({
           </div>
           {data && (
             <SheetDescription className="text-xs">
-              {t("chart.wordcloud.occurrences", { count: data.total_count })}
+              {t(countLabelKey, { count: data.total_count })}
               {showVideoBreakdown && data.videos.length > 0 && (
                 <> · {t("chart.wordcloud.inVideos", { count: data.videos.length })}</>
               )}

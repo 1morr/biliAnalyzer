@@ -99,6 +99,7 @@ function VideoCloudBody({
         word={selectedWord}
         fetchDetail={fetchDetail}
         showVideoBreakdown={false}
+        countLabelMode={type === "location" ? "uniqueUsers" : "occurrences"}
       />
     </>
   );
