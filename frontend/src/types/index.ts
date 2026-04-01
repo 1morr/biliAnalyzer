@@ -60,6 +60,7 @@ export interface UserDemographicsResponse {
   vip_ratio: DistributionItem[];
   gender_ratio: DistributionItem[];
   level_distribution: DistributionItem[];
+  location_distribution: DistributionItem[];
 }
 
 export interface SettingsResponse {

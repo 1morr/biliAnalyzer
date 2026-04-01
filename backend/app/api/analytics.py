@@ -141,7 +141,9 @@ async def query_demographics(query_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404)
     rows = await _query_video_content_rows(db, query_id)
     items = _gather_query_normalized_items(rows, "comment")
-    return UserDemographicsResponse(**compute_user_demographics(items))
+    demographics = compute_user_demographics(items)
+    demographics["location_distribution"] = compute_location_frequencies(items)
+    return UserDemographicsResponse(**demographics)
 
 
 @router.get("/videos/{bvid}/stats/demographics", response_model=UserDemographicsResponse)
@@ -152,7 +154,9 @@ async def video_demographics(bvid: str, db: AsyncSession = Depends(get_db)):
 
     content = await _video_content(db, bvid)
     items = _gather_video_comment_items(content)
-    return UserDemographicsResponse(**compute_user_demographics(items))
+    demographics = compute_user_demographics(items)
+    demographics["location_distribution"] = compute_location_frequencies(items)
+    return UserDemographicsResponse(**demographics)
 
 
 QUERY_WC_TYPES = {"content", "title", "tag", "danmaku", "comment", "interaction", "user", "subtitle", "location"}

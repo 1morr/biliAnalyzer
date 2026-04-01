@@ -45,6 +45,7 @@ class UserDemographicsResponse(BaseModel):
     vip_ratio: list[DistributionItem]
     gender_ratio: list[DistributionItem]
     level_distribution: list[DistributionItem]
+    location_distribution: list[DistributionItem]
 
 
 class WordFrequencyItem(BaseModel):

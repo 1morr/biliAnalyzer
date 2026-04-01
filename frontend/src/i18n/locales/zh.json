@@ -53,6 +53,7 @@
     "vipRatio": "大会员比例",
     "genderRatio": "性别比例",
     "levelDistribution": "用户等级分布",
+    "locationDistribution": "地区分布",
     "unknown": "未知",
     "vip": {
       "nonVip": "非大会员",

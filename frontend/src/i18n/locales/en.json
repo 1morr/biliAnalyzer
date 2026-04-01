@@ -53,6 +53,7 @@
     "vipRatio": "VIP Ratio",
     "genderRatio": "Gender Ratio",
     "levelDistribution": "User Level Distribution",
+    "locationDistribution": "Location Distribution",
     "unknown": "Unknown",
     "vip": {
       "nonVip": "Non-VIP",

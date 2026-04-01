@@ -12,14 +12,9 @@ interface WordCloudGridProps {
 
 type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
 type ContentCloudType = "content" | "title" | "tag" | "subtitle";
+type SimpleCloudType = "user" | "comment";
 type InteractionCloudMode = "all" | "danmaku" | "comment";
 type InteractionCloudType = "interaction" | "danmaku" | "comment";
-type WordCloudType = "user" | "location";
-
-interface CloudDef {
-  type: WordCloudType;
-  labelKey: string;
-}
 
 const CONTENT_MODE_TO_TYPE: Record<ContentCloudMode, ContentCloudType> = {
   all: "content",
@@ -47,12 +42,7 @@ const INTERACTION_MODES: { value: InteractionCloudMode; labelKey: string }[] = [
   { value: "comment", labelKey: "chart.wordcloud.mode.comment" },
 ];
 
-const RIGHT_CLOUDS: CloudDef[] = [
-  { type: "user", labelKey: "chart.wordcloud.user" },
-  { type: "location", labelKey: "chart.wordcloud.location" },
-];
-
-type QueryCloudType = ContentCloudType | InteractionCloudType | WordCloudType;
+type QueryCloudType = ContentCloudType | InteractionCloudType | SimpleCloudType;
 
 function QueryCloudBody({
   queryId,
@@ -98,7 +88,7 @@ function QueryCloudBody({
         word={selectedWord}
         fetchDetail={fetchDetail}
         showVideoBreakdown={showVideoBreakdown}
-        countLabelMode={type === "location" ? "uniqueUsers" : "occurrences"}
+        countLabelMode="occurrences"
       />
     </>
   );
@@ -124,6 +114,23 @@ function ContentCloudPanel({ queryId }: { queryId: number }) {
           ))}
         </ToggleGroup>
       </div>
+      <QueryCloudBody
+        key={`${queryId}-${type}`}
+        queryId={queryId}
+        type={type}
+        height={240}
+        showVideoBreakdown={true}
+      />
+    </div>
+  );
+}
+
+function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: SimpleCloudType; labelKey: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
       <QueryCloudBody
         key={`${queryId}-${type}`}
         queryId={queryId}
@@ -166,31 +173,13 @@ function InteractionCloudPanel({ queryId }: { queryId: number }) {
   );
 }
 
-function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: WordCloudType; labelKey: string }) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
-      <QueryCloudBody
-        key={`${queryId}-${type}`}
-        queryId={queryId}
-        type={type}
-        height={240}
-        showVideoBreakdown={true}
-      />
-    </div>
-  );
-}
-
 export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
+      <CloudPanel queryId={queryId} type="user" labelKey="chart.wordcloud.user" />
+      <CloudPanel queryId={queryId} type="comment" labelKey="chart.wordcloud.comment" />
       <ContentCloudPanel queryId={queryId} />
       <InteractionCloudPanel queryId={queryId} />
-      {RIGHT_CLOUDS.map(({ type, labelKey }) => (
-        <CloudPanel key={type} queryId={queryId} type={type} labelKey={labelKey} />
-      ))}
     </div>
   );
 }

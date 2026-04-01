@@ -92,6 +92,41 @@ function buildBarOption(title: string, items: DistributionItem[], isDark: boolea
   };
 }
 
+function buildHorizontalBarOption(title: string, items: DistributionItem[], isDark: boolean) {
+  const names = items.map((item) => item.name).reverse();
+  const values = items.map((item) => item.value).reverse();
+  return {
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    title: {
+      text: title,
+      left: "center",
+      top: 0,
+      textStyle: { color: isDark ? "#f3f4f6" : "#111827", fontSize: 13, fontWeight: 500 },
+    },
+    grid: { left: 60, right: 16, top: 36, bottom: 8 },
+    xAxis: {
+      type: "value",
+      axisLabel: { color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11 },
+      splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
+    },
+    yAxis: {
+      type: "category",
+      data: names,
+      axisLabel: { color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11 },
+      axisLine: { lineStyle: { color: isDark ? "#374151" : "#e5e7eb" } },
+    },
+    series: [
+      {
+        type: "bar",
+        data: values,
+        itemStyle: { color: "#6366f1" },
+        barMaxWidth: 20,
+      },
+    ],
+  };
+}
+
 export default function UserDemographicsPanel({ data, loading = false, error = null }: UserDemographicsPanelProps) {
   const { t } = useTranslation();
   const isDark = document.documentElement.classList.contains("dark");
@@ -99,6 +134,7 @@ export default function UserDemographicsPanel({ data, loading = false, error = n
   const vipItems = useMemo(() => translateDistribution(data?.vip_ratio ?? [], t), [data?.vip_ratio, t]);
   const genderItems = useMemo(() => translateDistribution(data?.gender_ratio ?? [], t), [data?.gender_ratio, t]);
   const levelItems = useMemo(() => translateDistribution(data?.level_distribution ?? [], t), [data?.level_distribution, t]);
+  const locationItems = useMemo(() => (data?.location_distribution ?? []).slice(0, 10), [data?.location_distribution]);
 
   if (loading) {
     return (
@@ -135,7 +171,7 @@ export default function UserDemographicsPanel({ data, loading = false, error = n
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border/60 p-2">
           <ReactECharts option={buildPieOption(t("demographics.vipRatio"), vipItems, isDark)} style={{ height: 260 }} />
         </div>
@@ -145,6 +181,14 @@ export default function UserDemographicsPanel({ data, loading = false, error = n
         <div className="rounded-lg border border-border/60 p-2">
           <ReactECharts option={buildBarOption(t("demographics.levelDistribution"), levelItems, isDark)} style={{ height: 260 }} />
         </div>
+        {locationItems.length > 0 && (
+          <div className="rounded-lg border border-border/60 p-2">
+            <ReactECharts
+              option={buildHorizontalBarOption(t("demographics.locationDistribution"), locationItems, isDark)}
+              style={{ height: 260 }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -13,14 +13,9 @@ interface VideoWordCloudsProps {
 
 type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
 type VideoContentCloudType = "content" | "title" | "tag" | "subtitle";
+type SimpleCloudType = "user" | "comment";
 type InteractionCloudMode = "all" | "danmaku" | "comment";
 type VideoInteractionCloudType = "interaction" | "danmaku" | "comment";
-type VideoCloudType = "user" | "location";
-
-interface CloudDef {
-  type: VideoCloudType;
-  labelKey: string;
-}
 
 const CONTENT_MODE_TO_TYPE: Record<ContentCloudMode, VideoContentCloudType> = {
   all: "content",
@@ -48,14 +43,8 @@ const INTERACTION_MODES: { value: InteractionCloudMode; labelKey: string }[] = [
   { value: "comment", labelKey: "chart.wordcloud.mode.comment" },
 ];
 
-const CLOUDS: CloudDef[] = [
-  { type: "user", labelKey: "chart.wordcloud.user" },
-  { type: "location", labelKey: "chart.wordcloud.location" },
-];
-
 type VideoResolvedContentMode = ContentCloudMode | "disabled-subtitle";
-type VideoResolvedContentType = VideoContentCloudType | "content";
-type VideoAnyCloudType = VideoResolvedContentType | VideoInteractionCloudType | VideoCloudType;
+type VideoAnyCloudType = VideoContentCloudType | VideoInteractionCloudType | SimpleCloudType;
 
 function VideoCloudBody({
   bvid,
@@ -99,7 +88,7 @@ function VideoCloudBody({
         word={selectedWord}
         fetchDetail={fetchDetail}
         showVideoBreakdown={false}
-        countLabelMode={type === "location" ? "uniqueUsers" : "occurrences"}
+        countLabelMode="occurrences"
       />
     </>
   );
@@ -126,6 +115,22 @@ function ContentCloudPanel({ bvid, hasSubtitle }: { bvid: string; hasSubtitle: b
           ))}
         </ToggleGroup>
       </div>
+      <VideoCloudBody
+        key={`${bvid}-${type}`}
+        bvid={bvid}
+        type={type}
+        height={160}
+      />
+    </div>
+  );
+}
+
+function CloudPanel({ bvid, type, labelKey }: { bvid: string; type: SimpleCloudType; labelKey: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
       <VideoCloudBody
         key={`${bvid}-${type}`}
         bvid={bvid}
@@ -166,30 +171,13 @@ function InteractionCloudPanel({ bvid }: { bvid: string }) {
   );
 }
 
-function CloudPanel({ bvid, type, labelKey }: { bvid: string; type: VideoCloudType; labelKey: string }) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{t(labelKey)}</p>
-      <VideoCloudBody
-        key={`${bvid}-${type}`}
-        bvid={bvid}
-        type={type}
-        height={160}
-      />
-    </div>
-  );
-}
-
 export default function VideoWordClouds({ bvid, hasSubtitle }: VideoWordCloudsProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
+      <CloudPanel bvid={bvid} type="user" labelKey="chart.wordcloud.user" />
+      <CloudPanel bvid={bvid} type="comment" labelKey="chart.wordcloud.comment" />
       <ContentCloudPanel bvid={bvid} hasSubtitle={hasSubtitle} />
       <InteractionCloudPanel bvid={bvid} />
-      {CLOUDS.map(({ type, labelKey }) => (
-        <CloudPanel key={type} bvid={bvid} type={type} labelKey={labelKey} />
-      ))}
     </div>
   );
 }
