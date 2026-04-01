@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { VideoDetail, VideoComparison, UserDemographicsResponse, DemographicsFilter } from "@/types";
-import { EMPTY_FILTER } from "@/types";
+import { createEmptyFilter } from "@/types";
 import VideoHeader from "@/components/video/VideoHeader";
 import VideoStatsCards from "@/components/video/VideoStatsCards";
 import RadarChart from "@/components/video/RadarChart";
@@ -21,7 +21,7 @@ export default function VideoDetailPage() {
   const [comparison, setComparison] = useState<VideoComparison | null>(null);
   const [demographics, setDemographics] = useState<UserDemographicsResponse | null>(null);
   const [demographicsError, setDemographicsError] = useState<string | null>(null);
-  const [demoFilter, setDemoFilter] = useState<DemographicsFilter>({ ...EMPTY_FILTER });
+  const [demoFilter, setDemoFilter] = useState<DemographicsFilter>(createEmptyFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +34,7 @@ export default function VideoDetailPage() {
     setComparison(null);
     setDemographics(null);
     setDemographicsError(null);
-    setDemoFilter({ ...EMPTY_FILTER });
+    setDemoFilter(createEmptyFilter());
 
     const fetches: Promise<void>[] = [
       api.getVideo(bvid).then(setVideo),

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { WordFrequencyItem, WordDetailResponse, DemographicsFilter } from "@/types";
+import { isFilterEmpty } from "@/types";
 import WordCloudChart from "@/components/shared/WordCloudChart";
 import WordDetailPanel from "@/components/shared/WordDetailPanel";
 
@@ -65,8 +66,8 @@ function VideoCloudBody({
 
   const isFilterable = type === "user" || type === "comment";
   const activeFilter = isFilterable ? filter : undefined;
-  const hasFilter = activeFilter && (activeFilter.gender.length > 0 || activeFilter.vip.length > 0 || activeFilter.level.length > 0 || activeFilter.location.length > 0);
-  const filterKey = hasFilter ? JSON.stringify(activeFilter) : "";
+  const hasFilter = activeFilter && !isFilterEmpty(activeFilter);
+  const filterKey = useMemo(() => hasFilter ? JSON.stringify(activeFilter) : "", [hasFilter, activeFilter]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -88,7 +89,7 @@ function VideoCloudBody({
     }
 
     return () => { active = false; clearTimeout(debounceRef.current); };
-  }, [bvid, type, filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bvid, type, filterKey]); // filterKey encodes activeFilter
 
   const handleWordClick = useCallback((word: string) => {
     setSelectedWord(word);
@@ -97,7 +98,7 @@ function VideoCloudBody({
 
   const fetchDetail = useCallback(
     (w: string): Promise<WordDetailResponse> => api.getVideoWordDetail(bvid, type, w, hasFilter ? activeFilter : undefined),
-    [bvid, type, filterKey], // eslint-disable-line react-hooks/exhaustive-deps
+    [bvid, type, filterKey], // filterKey encodes activeFilter
   );
 
   return (

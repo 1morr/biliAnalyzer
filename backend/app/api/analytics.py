@@ -171,6 +171,16 @@ def _parse_filter_param(value: str | None) -> list[str] | None:
     return parts or None
 
 
+def _apply_demo_filters(items: list[dict], gender, vip, level, location) -> list[dict]:
+    """Parse filter params and apply demographic filtering in one call."""
+    return filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+
+
+def _dicts_to_tuples(items: list[dict]) -> list[tuple]:
+    """Convert annotated dicts back to the tuple format expected by extract_* functions."""
+    return [(it["bvid"], it["title"], it["text"], it.get("user"), it.get("source"), it.get("location"), it.get("uid")) for it in items]
+
+
 @router.get("/queries/{query_id}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
 async def query_wordcloud(
     query_id: int, wc_type: str,
@@ -184,17 +194,12 @@ async def query_wordcloud(
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
     rows = await _query_video_content_rows(db, query_id)
-    has_filters = any([gender, vip, level, location])
 
     if wc_type == "user":
-        items = _gather_query_normalized_items(rows, "comment")
-        if has_filters:
-            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        items = _apply_demo_filters(_gather_query_normalized_items(rows, "comment"), gender, vip, level, location)
         words = compute_user_frequencies(items)
     elif wc_type == "comment":
-        items = _gather_query_normalized_items(rows, "comment")
-        if has_filters:
-            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        items = _apply_demo_filters(_gather_query_normalized_items(rows, "comment"), gender, vip, level, location)
         words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_query_normalized_items(rows, "comment")
@@ -229,12 +234,11 @@ async def query_wordcloud_detail(
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
     rows = await _query_video_content_rows(db, query_id)
-    has_filters = any([gender, vip, level, location])
+    has_filters = any((gender, vip, level, location))
 
     if wc_type in ("user", "comment") and has_filters:
         annotated = _gather_query_annotated_texts_with_video(rows, "comment")
-        filtered = filter_items(annotated, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
-        tuples = [(it["bvid"], it["title"], it["text"], it.get("user"), it.get("source"), it.get("location"), it.get("uid")) for it in filtered]
+        tuples = _dicts_to_tuples(_apply_demo_filters(annotated, gender, vip, level, location))
         if wc_type == "user":
             videos = extract_user_comments(tuples, word)
         else:
@@ -270,17 +274,12 @@ async def video_wordcloud(
         raise HTTPException(status_code=404)
 
     content = await _video_content(db, bvid)
-    has_filters = any([gender, vip, level, location])
 
     if wc_type == "user":
-        items = _gather_video_normalized_items(video, content)
-        if has_filters:
-            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        items = _apply_demo_filters(_gather_video_normalized_items(video, content), gender, vip, level, location)
         words = compute_user_frequencies(items)
     elif wc_type == "comment":
-        items = _gather_video_comment_items(content)
-        if has_filters:
-            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        items = _apply_demo_filters(_gather_video_comment_items(content), gender, vip, level, location)
         words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_video_normalized_items(video, content)
@@ -319,12 +318,11 @@ async def video_wordcloud_detail(
         raise HTTPException(status_code=404)
 
     content = await _video_content(db, bvid)
-    has_filters = any([gender, vip, level, location])
+    has_filters = any((gender, vip, level, location))
 
     if wc_type in ("user", "comment") and has_filters:
         annotated = _gather_video_annotated_texts_with_video(video, content, "interaction")
-        filtered = filter_items(annotated, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
-        tuples = [(it["bvid"], it["title"], it["text"], it.get("user"), it.get("source"), it.get("location"), it.get("uid")) for it in filtered]
+        tuples = _dicts_to_tuples(_apply_demo_filters(annotated, gender, vip, level, location))
         if wc_type == "user":
             videos = extract_user_comments(tuples, word)
         else:

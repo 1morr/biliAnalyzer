@@ -2,7 +2,7 @@ import { useMemo, useCallback, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
 import type { UserDemographicsResponse, DistributionItem, DemographicsFilter, UserRecord } from "@/types";
-import { EMPTY_FILTER } from "@/types";
+import { createEmptyFilter, isFilterEmpty } from "@/types";
 
 interface UserDemographicsPanelProps {
   data: UserDemographicsResponse | null;
@@ -14,9 +14,7 @@ interface UserDemographicsPanelProps {
 
 type Dimension = keyof DemographicsFilter;
 
-const NAME_TO_RAW: Record<string, string> = {};
-
-function translateDistribution(items: DistributionItem[], t: (key: string) => string) {
+function translateDistribution(items: DistributionItem[], t: (key: string) => string): DistributionItem[] {
   const nameMap: Record<string, string> = {
     "男": t("demographics.gender.male"),
     "女": t("demographics.gender.female"),
@@ -29,25 +27,32 @@ function translateDistribution(items: DistributionItem[], t: (key: string) => st
     LV4: "LV4", LV5: "LV5", LV6: "LV6",
   };
 
-  return items.map((item) => {
-    const translated = nameMap[item.name] ?? item.name;
-    if (translated !== item.name) {
-      NAME_TO_RAW[translated] = item.name;
-    }
-    return { ...item, name: translated };
-  });
+  return items.map((item) => ({
+    ...item,
+    name: nameMap[item.name] ?? item.name,
+  }));
 }
 
-function toRawValue(displayName: string): string {
-  return NAME_TO_RAW[displayName] ?? displayName;
-}
-
-function filterIsEmpty(f: DemographicsFilter): boolean {
-  return f.gender.length === 0 && f.vip.length === 0 && f.level.length === 0 && f.location.length === 0;
+function buildReverseNameMap(t: (key: string) => string): Record<string, string> {
+  const entries: [string, string][] = [
+    [t("demographics.gender.male"), "男"],
+    [t("demographics.gender.female"), "女"],
+    [t("demographics.gender.secret"), "保密"],
+    [t("demographics.unknown"), "未知"],
+    [t("demographics.vip.nonVip"), "非大会员"],
+    [t("demographics.vip.monthly"), "月度大会员"],
+    [t("demographics.vip.annual"), "年度大会员"],
+  ];
+  return Object.fromEntries(entries.filter(([k, v]) => k !== v));
 }
 
 function filtersEqual(a: DemographicsFilter, b: DemographicsFilter): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  for (const key of ["gender", "vip", "level", "location"] as Dimension[]) {
+    const aa = a[key], bb = b[key];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+  }
+  return true;
 }
 
 function applyFilters(users: UserRecord[], filter: DemographicsFilter, excludeDimension?: Dimension): UserRecord[] {
@@ -89,13 +94,13 @@ const LEVEL_ORDER = ["LV0", "LV1", "LV2", "LV3", "LV4", "LV5", "LV6", "未知"];
 
 function buildPieOption(
   title: string, items: DistributionItem[], isDark: boolean,
-  selected: string[],
+  selected: string[], toRaw: (name: string) => string,
 ) {
   const hasSelection = selected.length > 0;
   const data = items.map((item) => ({
     ...item,
     itemStyle: hasSelection
-      ? { opacity: selected.includes(toRawValue(item.name)) ? 1 : 0.3 }
+      ? { opacity: selected.includes(toRaw(item.name)) ? 1 : 0.3 }
       : undefined,
   }));
   return {
@@ -120,7 +125,7 @@ function buildPieOption(
 
 function buildBarOption(
   title: string, items: DistributionItem[], isDark: boolean,
-  selected: string[],
+  selected: string[], toRaw: (name: string) => string,
 ) {
   const hasSelection = selected.length > 0;
   return {
@@ -148,7 +153,7 @@ function buildBarOption(
         value: item.value,
         itemStyle: {
           color: "#6366f1",
-          opacity: hasSelection ? (selected.includes(toRawValue(item.name)) ? 1 : 0.3) : 1,
+          opacity: hasSelection ? (selected.includes(toRaw(item.name)) ? 1 : 0.3) : 1,
         },
       })),
     }],
@@ -157,14 +162,14 @@ function buildBarOption(
 
 function buildHorizontalBarOption(
   title: string, items: DistributionItem[], isDark: boolean,
-  selected: string[],
+  selected: string[], toRaw: (name: string) => string,
 ) {
   const hasSelection = selected.length > 0;
   // Reorder: selected first, then unselected — after reverse, selected end up at the visual top
   const reordered = hasSelection
     ? [
-        ...items.filter((it) => selected.includes(toRawValue(it.name))),
-        ...items.filter((it) => !selected.includes(toRawValue(it.name))),
+        ...items.filter((it) => selected.includes(toRaw(it.name))),
+        ...items.filter((it) => !selected.includes(toRaw(it.name))),
       ]
     : items;
   const names = reordered.map((item) => item.name).reverse();
@@ -172,7 +177,7 @@ function buildHorizontalBarOption(
     value: item.value,
     itemStyle: {
       color: "#6366f1",
-      opacity: hasSelection ? (selected.includes(toRawValue(item.name)) ? 1 : 0.3) : 1,
+      opacity: hasSelection ? (selected.includes(toRaw(item.name)) ? 1 : 0.3) : 1,
     },
   })).reverse();
   const total = names.length;
@@ -226,6 +231,9 @@ export default function UserDemographicsPanel({
   const isDark = document.documentElement.classList.contains("dark");
   const users = data?.users ?? [];
 
+  const reverseMap = useMemo(() => buildReverseNameMap(t), [t]);
+  const toRaw = useCallback((displayName: string) => reverseMap[displayName] ?? displayName, [reverseMap]);
+
   // Pending filter: staged selections not yet applied
   const [pending, setPending] = useState<DemographicsFilter>({ ...filter });
 
@@ -234,8 +242,8 @@ export default function UserDemographicsPanel({
     setPending({ ...filter });
   }, [filter]);
 
-  const hasPendingSelection = !filterIsEmpty(pending);
-  const hasConfirmedFilter = !filterIsEmpty(filter);
+  const hasPendingSelection = !isFilterEmpty(pending);
+  const hasConfirmedFilter = !isFilterEmpty(filter);
   const pendingDiffers = !filtersEqual(pending, filter);
 
   const togglePending = useCallback((dimension: Dimension, rawValue: string) => {
@@ -252,16 +260,16 @@ export default function UserDemographicsPanel({
     return (params: { name?: string; data?: { name?: string } }) => {
       const displayName = params.name || params.data?.name;
       if (!displayName) return;
-      togglePending(dimension, toRawValue(displayName));
+      togglePending(dimension, toRaw(displayName));
     };
-  }, [togglePending]);
+  }, [togglePending, toRaw]);
 
   const handleApply = useCallback(() => {
     onFilterChange({ ...pending });
   }, [pending, onFilterChange]);
 
   const handleClear = useCallback(() => {
-    const empty = { ...EMPTY_FILTER };
+    const empty = createEmptyFilter();
     setPending(empty);
     onFilterChange(empty);
   }, [onFilterChange]);
@@ -364,21 +372,21 @@ export default function UserDemographicsPanel({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border/60 p-2">
           <ReactECharts
-            option={buildPieOption(t("demographics.vipRatio"), vipItems, isDark, pending.vip)}
+            option={buildPieOption(t("demographics.vipRatio"), vipItems, isDark, pending.vip, toRaw)}
             style={{ height: 260 }}
             onEvents={{ click: makeClickHandler("vip") }}
           />
         </div>
         <div className="rounded-lg border border-border/60 p-2">
           <ReactECharts
-            option={buildPieOption(t("demographics.genderRatio"), genderItems, isDark, pending.gender)}
+            option={buildPieOption(t("demographics.genderRatio"), genderItems, isDark, pending.gender, toRaw)}
             style={{ height: 260 }}
             onEvents={{ click: makeClickHandler("gender") }}
           />
         </div>
         <div className="rounded-lg border border-border/60 p-2">
           <ReactECharts
-            option={buildBarOption(t("demographics.levelDistribution"), levelItems, isDark, pending.level)}
+            option={buildBarOption(t("demographics.levelDistribution"), levelItems, isDark, pending.level, toRaw)}
             style={{ height: 260 }}
             onEvents={{ click: makeClickHandler("level") }}
           />
@@ -386,7 +394,7 @@ export default function UserDemographicsPanel({
         {locationItems.length > 0 && (
           <div className="rounded-lg border border-border/60 p-2">
             <ReactECharts
-              option={buildHorizontalBarOption(t("demographics.locationDistribution"), locationItems, isDark, pending.location)}
+              option={buildHorizontalBarOption(t("demographics.locationDistribution"), locationItems, isDark, pending.location, toRaw)}
               style={{ height: 260 }}
               onEvents={{ click: makeClickHandler("location") }}
             />

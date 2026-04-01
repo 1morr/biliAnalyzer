@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { QueryDetail, StatsSummary, UserDemographicsResponse, VideoSummary, DemographicsFilter } from "@/types";
-import { EMPTY_FILTER } from "@/types";
+import { createEmptyFilter } from "@/types";
 import { useDashboardContext } from "@/components/layout/AppLayout";
 import StatsCards from "@/components/dashboard/StatsCards";
 import ViewsTrendChart from "@/components/dashboard/ViewsTrendChart";
@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
-  const [demoFilter, setDemoFilter] = useState<DemographicsFilter>({ ...EMPTY_FILTER });
+  const [demoFilter, setDemoFilter] = useState<DemographicsFilter>(createEmptyFilter);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -82,7 +82,7 @@ export default function Dashboard() {
       setErrorMsg(null);
       setQueryDetail(undefined);
       setOnAiClick(undefined);
-      setDemoFilter({ ...EMPTY_FILTER });
+      setDemoFilter(createEmptyFilter());
       clearPoll();
       return;
     }
@@ -94,7 +94,7 @@ export default function Dashboard() {
     setDemographicsError(null);
     setAllVideos([]);
     setErrorMsg(null);
-    setDemoFilter({ ...EMPTY_FILTER });
+    setDemoFilter(createEmptyFilter());
 
     fetchDetail(queryId).finally(() => setLoadingDetail(false));
 

@@ -78,9 +78,13 @@ export interface DemographicsFilter {
   location: string[];
 }
 
-export const EMPTY_FILTER: DemographicsFilter = {
-  gender: [], vip: [], level: [], location: [],
-};
+export function createEmptyFilter(): DemographicsFilter {
+  return { gender: [], vip: [], level: [], location: [] };
+}
+
+export function isFilterEmpty(f: DemographicsFilter): boolean {
+  return f.gender.length === 0 && f.vip.length === 0 && f.level.length === 0 && f.location.length === 0;
+}
 
 export interface SettingsResponse {
   sessdata: string; ai_base_url: string;
