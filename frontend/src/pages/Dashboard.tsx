@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
-import type { QueryDetail, StatsSummary, VideoSummary } from "@/types";
+import type { QueryDetail, StatsSummary, UserDemographicsResponse, VideoSummary } from "@/types";
 import { useDashboardContext } from "@/components/layout/AppLayout";
 import StatsCards from "@/components/dashboard/StatsCards";
 import ViewsTrendChart from "@/components/dashboard/ViewsTrendChart";
@@ -13,6 +13,7 @@ import PublishTimeHeatmap from "@/components/dashboard/PublishTimeHeatmap";
 import DurationChart from "@/components/dashboard/DurationChart";
 import VideoList from "@/components/dashboard/VideoList";
 import AIPanel from "@/components/dashboard/AIPanel";
+import UserDemographicsPanel from "@/components/shared/UserDemographicsPanel";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -23,6 +24,8 @@ export default function Dashboard() {
 
   const [detail, setDetail] = useState<QueryDetail | null>(null);
   const [stats, setStats] = useState<StatsSummary | null>(null);
+  const [demographics, setDemographics] = useState<UserDemographicsResponse | null>(null);
+  const [demographicsError, setDemographicsError] = useState<string | null>(null);
   const [allVideos, setAllVideos] = useState<VideoSummary[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -46,11 +49,16 @@ export default function Dashboard() {
       if (d.status === "done") {
         clearPoll();
         // Fetch stats and a page of videos for scatter chart
-        const [s, vPage] = await Promise.all([
+        const [s, dResult, vPage] = await Promise.all([
           api.getStatsSummary(id),
+          api.getQueryDemographics(id)
+            .then((result) => ({ result, error: null }))
+            .catch(() => ({ result: null, error: t("common.error") })),
           api.getVideos(id, { sort_by: "views", order: "desc", page: "1", page_size: "100" }),
         ]);
         setStats(s);
+        setDemographics(dResult.result);
+        setDemographicsError(dResult.error);
         setAllVideos(vPage.items);
       } else if (d.status === "error") {
         clearPoll();
@@ -66,6 +74,8 @@ export default function Dashboard() {
     if (!queryId) {
       setDetail(null);
       setStats(null);
+      setDemographics(null);
+      setDemographicsError(null);
       setAllVideos([]);
       setErrorMsg(null);
       setQueryDetail(undefined);
@@ -77,6 +87,8 @@ export default function Dashboard() {
     setLoadingDetail(true);
     setDetail(null);
     setStats(null);
+    setDemographics(null);
+    setDemographicsError(null);
     setAllVideos([]);
     setErrorMsg(null);
 
@@ -168,6 +180,12 @@ export default function Dashboard() {
             <div className="rounded-xl border border-border bg-card p-4">
               <InteractionChart queryId={queryId} totalViews={stats?.total_views} />
             </div>
+          </div>
+        )}
+
+        {queryId && (demographics || demographicsError) && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <UserDemographicsPanel data={demographics} error={demographicsError} />
           </div>
         )}
 

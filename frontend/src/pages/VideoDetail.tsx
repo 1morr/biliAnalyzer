@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
-import type { VideoDetail, VideoComparison } from "@/types";
+import type { VideoDetail, VideoComparison, UserDemographicsResponse } from "@/types";
 import VideoHeader from "@/components/video/VideoHeader";
 import VideoStatsCards from "@/components/video/VideoStatsCards";
 import RadarChart from "@/components/video/RadarChart";
 import ComparisonBars from "@/components/video/ComparisonBars";
 import VideoWordClouds from "@/components/video/VideoWordClouds";
+import UserDemographicsPanel from "@/components/shared/UserDemographicsPanel";
 
 export default function VideoDetailPage() {
   const { t } = useTranslation();
@@ -17,6 +18,8 @@ export default function VideoDetailPage() {
 
   const [video, setVideo] = useState<VideoDetail | null>(null);
   const [comparison, setComparison] = useState<VideoComparison | null>(null);
+  const [demographics, setDemographics] = useState<UserDemographicsResponse | null>(null);
+  const [demographicsError, setDemographicsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,9 +28,22 @@ export default function VideoDetailPage() {
 
     setLoading(true);
     setError(null);
+    setVideo(null);
+    setComparison(null);
+    setDemographics(null);
+    setDemographicsError(null);
 
     const fetches: Promise<void>[] = [
       api.getVideo(bvid).then(setVideo),
+      api.getVideoDemographics(bvid)
+        .then((result) => {
+          setDemographics(result);
+          setDemographicsError(null);
+        })
+        .catch(() => {
+          setDemographics(null);
+          setDemographicsError(t("common.error"));
+        }),
     ];
 
     if (queryId) {
@@ -89,6 +105,11 @@ export default function VideoDetailPage() {
         <div className="rounded-xl border border-border bg-card p-4">
           <ComparisonBars data={comparison} />
         </div>
+      </div>
+
+      {/* User demographics */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <UserDemographicsPanel data={demographics} error={demographicsError} />
       </div>
 
       {/* Word clouds */}

@@ -33,6 +33,20 @@ class VideoComparison(BaseModel):
     max_values: list[float]  # Global max for each metric across all videos in query
 
 
+class DistributionItem(BaseModel):
+    name: str
+    value: int
+
+
+class UserDemographicsResponse(BaseModel):
+    total_unique_users: int
+    uid_backed_users: int
+    username_fallback_users: int
+    vip_ratio: list[DistributionItem]
+    gender_ratio: list[DistributionItem]
+    level_distribution: list[DistributionItem]
+
+
 class WordFrequencyItem(BaseModel):
     name: str
     value: int

@@ -7,12 +7,12 @@ from app.core.deps import get_db
 from app.models import Query, QueryVideo, Video, VideoStats, VideoContent
 from app.schemas.analytics import (
     StatsSummary, TrendPoint, InteractionData, VideoComparison,
-    WordFrequencyResponse, WordDetailResponse,
+    WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse,
 )
 from app.services.wordcloud_svc import (
     compute_word_frequencies, compute_tag_frequencies, compute_user_frequencies,
-    compute_location_frequencies, extract_word_contexts, extract_user_comments,
-    extract_location_comments, normalize_items,
+    compute_location_frequencies, compute_user_demographics, extract_word_contexts,
+    extract_user_comments, extract_location_comments, normalize_items,
 )
 
 router = APIRouter()
@@ -132,6 +132,27 @@ async def video_comparison(
         max_values=[round(m, 1) for m in max_values],
         percentage_diff=pct_diff,
     )
+
+
+@router.get("/queries/{query_id}/stats/demographics", response_model=UserDemographicsResponse)
+async def query_demographics(query_id: int, db: AsyncSession = Depends(get_db)):
+    query = await db.get(Query, query_id)
+    if not query:
+        raise HTTPException(status_code=404)
+    rows = await _query_video_content_rows(db, query_id)
+    items = _gather_query_normalized_items(rows, "comment")
+    return UserDemographicsResponse(**compute_user_demographics(items))
+
+
+@router.get("/videos/{bvid}/stats/demographics", response_model=UserDemographicsResponse)
+async def video_demographics(bvid: str, db: AsyncSession = Depends(get_db)):
+    video = await db.get(Video, bvid)
+    if not video:
+        raise HTTPException(status_code=404)
+
+    content = await _video_content(db, bvid)
+    items = _gather_video_comment_items(content)
+    return UserDemographicsResponse(**compute_user_demographics(items))
 
 
 QUERY_WC_TYPES = {"content", "title", "tag", "danmaku", "comment", "interaction", "user", "subtitle", "location"}
@@ -282,8 +303,16 @@ def _safe_json_loads(raw: str) -> list:
 
 def _extract_texts_from_items(raw_items: list) -> list[str]:
     """Extract plain text strings from items (handles both old and new format)."""
-    items = normalize_items(raw_items)
-    return [item["text"] for item in items if item["text"]]
+    texts = []
+    for item in raw_items:
+        if isinstance(item, str):
+            if item:
+                texts.append(item)
+        elif isinstance(item, dict):
+            text = item.get("text", "")
+            if text:
+                texts.append(text)
+    return texts
 
 
 def _gather_query_texts(rows: list, wc_type: str) -> list[str]:
@@ -346,16 +375,16 @@ def _gather_query_annotated_texts(rows: list, wc_type: str) -> list[tuple]:
         elif wc_type == "interaction" and content:
             if content.danmakus:
                 for item in normalize_items(_safe_json_loads(content.danmakus)):
-                    annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location")))
+                    annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location"), item.get("uid")))
             if content.comments:
                 for item in normalize_items(_safe_json_loads(content.comments)):
-                    annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location")))
+                    annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location"), item.get("uid")))
         elif wc_type == "danmaku" and content and content.danmakus:
             for item in normalize_items(_safe_json_loads(content.danmakus)):
-                annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location")))
+                annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location"), item.get("uid")))
         elif wc_type == "comment" and content and content.comments:
             for item in normalize_items(_safe_json_loads(content.comments)):
-                annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location")))
+                annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location"), item.get("uid")))
     return annotated
 
 
@@ -396,6 +425,12 @@ def _gather_video_normalized_items(video: Video, content: VideoContent | None) -
     return items
 
 
+def _gather_video_comment_items(content: VideoContent | None) -> list[dict]:
+    if not content or not content.comments:
+        return []
+    return normalize_items(_safe_json_loads(content.comments))
+
+
 def _gather_video_annotated_texts(
     video: Video, content: VideoContent | None, wc_type: str,
 ) -> list[tuple]:
@@ -417,14 +452,14 @@ def _gather_video_annotated_texts(
     elif wc_type == "interaction" and content:
         if content.danmakus:
             for item in normalize_items(_safe_json_loads(content.danmakus)):
-                annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location")))
+                annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location"), item.get("uid")))
         if content.comments:
             for item in normalize_items(_safe_json_loads(content.comments)):
-                annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location")))
+                annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location"), item.get("uid")))
     elif wc_type == "danmaku" and content and content.danmakus:
         for item in normalize_items(_safe_json_loads(content.danmakus)):
-            annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location")))
+            annotated.append((bvid, title, item["text"], item["user"], "danmaku", item.get("location"), item.get("uid")))
     elif wc_type == "comment" and content and content.comments:
         for item in normalize_items(_safe_json_loads(content.comments)):
-            annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location")))
+            annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location"), item.get("uid")))
     return annotated

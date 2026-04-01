@@ -1,4 +1,4 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -27,8 +27,12 @@ export const api = {
   getStatsSummary: (queryId: number) => request<StatsSummary>(`/queries/${queryId}/stats/summary`),
   getTrend: (queryId: number) => request<TrendPoint[]>(`/queries/${queryId}/stats/trend`),
   getInteraction: (queryId: number) => request<InteractionData>(`/queries/${queryId}/stats/interaction`),
+  getQueryDemographics: (queryId: number) =>
+    request<UserDemographicsResponse>(`/queries/${queryId}/stats/demographics`),
   getComparison: (bvid: string, queryId: number) =>
     request<VideoComparison>(`/videos/${bvid}/stats/comparison?query_id=${queryId}`),
+  getVideoDemographics: (bvid: string) =>
+    request<UserDemographicsResponse>(`/videos/${bvid}/stats/demographics`),
   getSettings: () => request<SettingsResponse>("/settings"),
   updateSettings: (data: Partial<SettingsResponse>) =>
     request<SettingsResponse>("/settings", { method: "PUT", body: JSON.stringify(data) }),

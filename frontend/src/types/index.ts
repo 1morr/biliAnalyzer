@@ -48,6 +48,20 @@ export interface VideoComparison {
   max_values: number[];
 }
 
+export interface DistributionItem {
+  name: string;
+  value: number;
+}
+
+export interface UserDemographicsResponse {
+  total_unique_users: number;
+  uid_backed_users: number;
+  username_fallback_users: number;
+  vip_ratio: DistributionItem[];
+  gender_ratio: DistributionItem[];
+  level_distribution: DistributionItem[];
+}
+
 export interface SettingsResponse {
   sessdata: string; ai_base_url: string;
   ai_api_key: string; ai_model: string;

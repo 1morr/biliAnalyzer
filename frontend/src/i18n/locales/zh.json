@@ -43,5 +43,26 @@
     "sessdataWarning": "当前未配置 SESSDATA。你仍然可以查询，但无法获取完整内容：弹幕正文和字幕将缺失，相关词云和详情也会不完整。",
     "sessdataInvalid": "SESSDATA 已失效，请前往设置页面重新配置。弹幕正文和字幕将无法获取。",
     "preset": { "7d": "最近7天", "30d": "最近30天", "3m": "最近3个月", "6m": "最近6个月", "1y": "最近1年", "all": "全部" }
+  },
+  "demographics": {
+    "title": "用户画像",
+    "uniqueUsers": "{{count}} 位唯一用户",
+    "uidBacked": "UID 去重：{{count}}",
+    "usernameFallback": "用户名兜底：{{count}}",
+    "fallbackNotice": "部分历史评论没有 UID，因此有一部分去重结果是按用户名近似统计的。",
+    "vipRatio": "大会员比例",
+    "genderRatio": "性别比例",
+    "levelDistribution": "用户等级分布",
+    "unknown": "未知",
+    "vip": {
+      "nonVip": "非大会员",
+      "monthly": "月度大会员",
+      "annual": "年度大会员"
+    },
+    "gender": {
+      "male": "男",
+      "female": "女",
+      "secret": "保密"
+    }
   }
 }

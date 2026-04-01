@@ -43,5 +43,26 @@
     "sessdataWarning": "SESSDATA is not configured. You can still run the query, but danmaku text and subtitles will be unavailable, so related details and word clouds will be incomplete.",
     "sessdataInvalid": "SESSDATA has expired. Please reconfigure it in Settings. Danmaku text and subtitles will be unavailable.",
     "preset": { "7d": "Last 7 days", "30d": "Last 30 days", "3m": "Last 3 months", "6m": "Last 6 months", "1y": "Last 1 year", "all": "All time" }
+  },
+  "demographics": {
+    "title": "Audience Demographics",
+    "uniqueUsers": "{{count}} unique users",
+    "uidBacked": "UID-backed: {{count}}",
+    "usernameFallback": "Username fallback: {{count}}",
+    "fallbackNotice": "Some historical comments do not include UID, so part of the deduplication uses usernames as a fallback.",
+    "vipRatio": "VIP Ratio",
+    "genderRatio": "Gender Ratio",
+    "levelDistribution": "User Level Distribution",
+    "unknown": "Unknown",
+    "vip": {
+      "nonVip": "Non-VIP",
+      "monthly": "Monthly VIP",
+      "annual": "Annual VIP"
+    },
+    "gender": {
+      "male": "Male",
+      "female": "Female",
+      "secret": "Secret"
+    }
   }
 }
