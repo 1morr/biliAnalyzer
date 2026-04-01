@@ -38,6 +38,13 @@ class DistributionItem(BaseModel):
     value: int
 
 
+class UserRecord(BaseModel):
+    gender: str
+    vip: str
+    level: str
+    location: str | None = None
+
+
 class UserDemographicsResponse(BaseModel):
     total_unique_users: int
     uid_backed_users: int
@@ -46,6 +53,7 @@ class UserDemographicsResponse(BaseModel):
     gender_ratio: list[DistributionItem]
     level_distribution: list[DistributionItem]
     location_distribution: list[DistributionItem]
+    users: list[UserRecord] = []
 
 
 class WordFrequencyItem(BaseModel):

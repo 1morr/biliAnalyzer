@@ -114,10 +114,31 @@ def _counter_to_distribution(counter: Counter[str], order: list[str]) -> list[di
     return result
 
 
+def filter_items(items: list[dict], gender=None, vip=None, level=None, location=None) -> list[dict]:
+    """Filter normalized items by demographic criteria (OR within, AND across dimensions)."""
+    if not any([gender, vip, level, location]):
+        return items
+    filtered = []
+    for item in items:
+        if gender and _normalize_gender(item.get("user_sex")) not in gender:
+            continue
+        if vip and _normalize_vip(item.get("vip_status"), item.get("vip_type")) not in vip:
+            continue
+        if level and _normalize_level(item.get("user_level")) not in level:
+            continue
+        if location:
+            loc = _normalize_location(item.get("location"))
+            if not loc or loc not in location:
+                continue
+        filtered.append(item)
+    return filtered
+
+
 def compute_user_demographics(items: list[dict]) -> dict:
     """Aggregate deduplicated comment-user demographics.
 
     Dedupes by uid when available, otherwise falls back to username.
+    Returns aggregated distributions plus a raw `users` list for client-side cross-filtering.
     """
     identities: dict[str, dict] = {}
     username_to_uid_identity: dict[str, str] = {}
@@ -162,6 +183,7 @@ def compute_user_demographics(items: list[dict]) -> dict:
                 "gender": "未知",
                 "level": "未知",
                 "vip": "未知",
+                "location": None,
                 "identity_source": source,
                 "username": username,
             }
@@ -170,6 +192,7 @@ def compute_user_demographics(items: list[dict]) -> dict:
         record["gender"] = _prefer_value(record.get("gender"), _normalize_gender(item.get("user_sex")))
         record["level"] = _prefer_value(record.get("level"), _normalize_level(item.get("user_level")))
         record["vip"] = _prefer_value(record.get("vip"), _normalize_vip(item.get("vip_status"), item.get("vip_type")))
+        record["location"] = _prefer_value(record.get("location"), _normalize_location(item.get("location")))
         if uid not in (None, ""):
             record["identity_source"] = "uid"
         if username:
@@ -181,6 +204,11 @@ def compute_user_demographics(items: list[dict]) -> dict:
     uid_backed_users = sum(1 for record in identities.values() if record.get("identity_source") == "uid")
     username_fallback_users = sum(1 for record in identities.values() if record.get("identity_source") == "name")
 
+    users = [
+        {"gender": r["gender"], "vip": r["vip"], "level": r["level"], "location": r.get("location")}
+        for r in identities.values()
+    ]
+
     return {
         "total_unique_users": len(identities),
         "uid_backed_users": uid_backed_users,
@@ -188,6 +216,7 @@ def compute_user_demographics(items: list[dict]) -> dict:
         "gender_ratio": _counter_to_distribution(gender_counter, ["男", "女", "保密", "未知"]),
         "level_distribution": _counter_to_distribution(level_counter, ["LV0", "LV1", "LV2", "LV3", "LV4", "LV5", "LV6", "未知"]),
         "vip_ratio": _counter_to_distribution(vip_counter, ["非大会员", "月度大会员", "年度大会员", "未知"]),
+        "users": users,
     }
 
 

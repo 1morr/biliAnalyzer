@@ -64,6 +64,9 @@
       "male": "男",
       "female": "女",
       "secret": "保密"
-    }
+    },
+    "clearFilter": "清除筛选",
+    "applyFilter": "确认筛选",
+    "filtered": "{{count}} 位用户（已筛选）"
   }
 }

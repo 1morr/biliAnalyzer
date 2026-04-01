@@ -12,7 +12,7 @@ from app.schemas.analytics import (
 from app.services.wordcloud_svc import (
     compute_word_frequencies, compute_tag_frequencies, compute_user_frequencies,
     compute_location_frequencies, compute_user_demographics, extract_word_contexts,
-    extract_user_comments, extract_location_comments, normalize_items,
+    extract_user_comments, extract_location_comments, normalize_items, filter_items,
 )
 
 router = APIRouter()
@@ -163,16 +163,39 @@ QUERY_WC_TYPES = {"content", "title", "tag", "danmaku", "comment", "interaction"
 VIDEO_WC_TYPES = {"content", "title", "tag", "subtitle", "danmaku", "comment", "interaction", "user", "location"}
 
 
+def _parse_filter_param(value: str | None) -> list[str] | None:
+    """Parse comma-separated filter param to list, or None if empty."""
+    if not value:
+        return None
+    parts = [v.strip() for v in value.split(",") if v.strip()]
+    return parts or None
+
+
 @router.get("/queries/{query_id}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
-async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depends(get_db)):
+async def query_wordcloud(
+    query_id: int, wc_type: str,
+    gender: str | None = QueryParam(None),
+    vip: str | None = QueryParam(None),
+    level: str | None = QueryParam(None),
+    location: str | None = QueryParam(None),
+    db: AsyncSession = Depends(get_db),
+):
     if wc_type not in QUERY_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
     rows = await _query_video_content_rows(db, query_id)
+    has_filters = any([gender, vip, level, location])
 
     if wc_type == "user":
         items = _gather_query_normalized_items(rows, "comment")
+        if has_filters:
+            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
         words = compute_user_frequencies(items)
+    elif wc_type == "comment":
+        items = _gather_query_normalized_items(rows, "comment")
+        if has_filters:
+            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_query_normalized_items(rows, "comment")
         words = compute_location_frequencies(items)
@@ -196,14 +219,27 @@ async def query_wordcloud(query_id: int, wc_type: str, db: AsyncSession = Depend
 async def query_wordcloud_detail(
     query_id: int, wc_type: str,
     word: str = QueryParam(...),
+    gender: str | None = QueryParam(None),
+    vip: str | None = QueryParam(None),
+    level: str | None = QueryParam(None),
+    location: str | None = QueryParam(None),
     db: AsyncSession = Depends(get_db),
 ):
     if wc_type not in QUERY_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {QUERY_WC_TYPES}")
 
     rows = await _query_video_content_rows(db, query_id)
+    has_filters = any([gender, vip, level, location])
 
-    if wc_type == "user":
+    if wc_type in ("user", "comment") and has_filters:
+        annotated = _gather_query_annotated_texts_with_video(rows, "comment")
+        filtered = filter_items(annotated, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        tuples = [(it["bvid"], it["title"], it["text"], it.get("user"), it.get("source"), it.get("location"), it.get("uid")) for it in filtered]
+        if wc_type == "user":
+            videos = extract_user_comments(tuples, word)
+        else:
+            videos = extract_word_contexts(tuples, word)
+    elif wc_type == "user":
         annotated = _gather_query_annotated_texts(rows, "comment")
         videos = extract_user_comments(annotated, word)
     elif wc_type == "location":
@@ -218,7 +254,14 @@ async def query_wordcloud_detail(
 
 
 @router.get("/videos/{bvid}/wordcloud/{wc_type}", response_model=WordFrequencyResponse)
-async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(get_db)):
+async def video_wordcloud(
+    bvid: str, wc_type: str,
+    gender: str | None = QueryParam(None),
+    vip: str | None = QueryParam(None),
+    level: str | None = QueryParam(None),
+    location: str | None = QueryParam(None),
+    db: AsyncSession = Depends(get_db),
+):
     if wc_type not in VIDEO_WC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {VIDEO_WC_TYPES}")
 
@@ -227,10 +270,18 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=404)
 
     content = await _video_content(db, bvid)
+    has_filters = any([gender, vip, level, location])
 
     if wc_type == "user":
         items = _gather_video_normalized_items(video, content)
+        if has_filters:
+            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
         words = compute_user_frequencies(items)
+    elif wc_type == "comment":
+        items = _gather_video_comment_items(content)
+        if has_filters:
+            items = filter_items(items, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_video_normalized_items(video, content)
         words = compute_location_frequencies(items)
@@ -254,6 +305,10 @@ async def video_wordcloud(bvid: str, wc_type: str, db: AsyncSession = Depends(ge
 async def video_wordcloud_detail(
     bvid: str, wc_type: str,
     word: str = QueryParam(...),
+    gender: str | None = QueryParam(None),
+    vip: str | None = QueryParam(None),
+    level: str | None = QueryParam(None),
+    location: str | None = QueryParam(None),
     db: AsyncSession = Depends(get_db),
 ):
     if wc_type not in VIDEO_WC_TYPES:
@@ -264,8 +319,17 @@ async def video_wordcloud_detail(
         raise HTTPException(status_code=404)
 
     content = await _video_content(db, bvid)
+    has_filters = any([gender, vip, level, location])
 
-    if wc_type == "user":
+    if wc_type in ("user", "comment") and has_filters:
+        annotated = _gather_video_annotated_texts_with_video(video, content, "interaction")
+        filtered = filter_items(annotated, _parse_filter_param(gender), _parse_filter_param(vip), _parse_filter_param(level), _parse_filter_param(location))
+        tuples = [(it["bvid"], it["title"], it["text"], it.get("user"), it.get("source"), it.get("location"), it.get("uid")) for it in filtered]
+        if wc_type == "user":
+            videos = extract_user_comments(tuples, word)
+        else:
+            videos = extract_word_contexts(tuples, word)
+    elif wc_type == "user":
         annotated = _gather_video_annotated_texts(video, content, "interaction")
         videos = extract_user_comments(annotated, word)
     elif wc_type == "location":
@@ -467,3 +531,49 @@ def _gather_video_annotated_texts(
         for item in normalize_items(_safe_json_loads(content.comments)):
             annotated.append((bvid, title, item["text"], item["user"], "comment", item.get("location"), item.get("uid")))
     return annotated
+
+
+def _gather_query_annotated_texts_with_video(rows: list, source_type: str) -> list[dict]:
+    """Gather normalized items with bvid/title metadata for filtered detail lookups."""
+    all_items: list[dict] = []
+    for video, content in rows:
+        if not content:
+            continue
+        bvid = video.bvid
+        title = video.title or bvid
+        raw = None
+        if source_type == "comment" and content.comments:
+            raw = content.comments
+        elif source_type == "danmaku" and content.danmakus:
+            raw = content.danmakus
+        if raw:
+            for item in normalize_items(_safe_json_loads(raw)):
+                item["bvid"] = bvid
+                item["title"] = title
+                item["source"] = source_type
+                all_items.append(item)
+    return all_items
+
+
+def _gather_video_annotated_texts_with_video(
+    video: Video, content: VideoContent | None, wc_type: str,
+) -> list[dict]:
+    """Gather normalized items with bvid/title for a single video (filtered detail lookups)."""
+    items: list[dict] = []
+    if not content:
+        return items
+    bvid = video.bvid
+    title = video.title or bvid
+    if wc_type in ("interaction", "comment") and content.comments:
+        for item in normalize_items(_safe_json_loads(content.comments)):
+            item["bvid"] = bvid
+            item["title"] = title
+            item["source"] = "comment"
+            items.append(item)
+    if wc_type in ("interaction", "danmaku") and content.danmakus:
+        for item in normalize_items(_safe_json_loads(content.danmakus)):
+            item["bvid"] = bvid
+            item["title"] = title
+            item["source"] = "danmaku"
+            items.append(item)
+    return items

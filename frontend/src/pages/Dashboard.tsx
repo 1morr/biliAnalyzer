@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
-import type { QueryDetail, StatsSummary, UserDemographicsResponse, VideoSummary } from "@/types";
+import type { QueryDetail, StatsSummary, UserDemographicsResponse, VideoSummary, DemographicsFilter } from "@/types";
+import { EMPTY_FILTER } from "@/types";
 import { useDashboardContext } from "@/components/layout/AppLayout";
 import StatsCards from "@/components/dashboard/StatsCards";
 import ViewsTrendChart from "@/components/dashboard/ViewsTrendChart";
@@ -30,6 +31,7 @@ export default function Dashboard() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [demoFilter, setDemoFilter] = useState<DemographicsFilter>({ ...EMPTY_FILTER });
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -80,6 +82,7 @@ export default function Dashboard() {
       setErrorMsg(null);
       setQueryDetail(undefined);
       setOnAiClick(undefined);
+      setDemoFilter({ ...EMPTY_FILTER });
       clearPoll();
       return;
     }
@@ -91,6 +94,7 @@ export default function Dashboard() {
     setDemographicsError(null);
     setAllVideos([]);
     setErrorMsg(null);
+    setDemoFilter({ ...EMPTY_FILTER });
 
     fetchDetail(queryId).finally(() => setLoadingDetail(false));
 
@@ -185,7 +189,7 @@ export default function Dashboard() {
 
         {queryId && (demographics || demographicsError) && (
           <div className="rounded-xl border border-border bg-card p-4">
-            <UserDemographicsPanel data={demographics} error={demographicsError} />
+            <UserDemographicsPanel data={demographics} error={demographicsError} filter={demoFilter} onFilterChange={setDemoFilter} />
           </div>
         )}
 
@@ -205,7 +209,7 @@ export default function Dashboard() {
               )}
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <WordCloudGrid queryId={queryId} />
+              <WordCloudGrid queryId={queryId} filter={demoFilter} />
             </div>
           </div>
         )}

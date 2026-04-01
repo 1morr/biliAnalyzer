@@ -61,7 +61,26 @@ export interface UserDemographicsResponse {
   gender_ratio: DistributionItem[];
   level_distribution: DistributionItem[];
   location_distribution: DistributionItem[];
+  users: UserRecord[];
 }
+
+export interface UserRecord {
+  gender: string;
+  vip: string;
+  level: string;
+  location: string | null;
+}
+
+export interface DemographicsFilter {
+  gender: string[];
+  vip: string[];
+  level: string[];
+  location: string[];
+}
+
+export const EMPTY_FILTER: DemographicsFilter = {
+  gender: [], vip: [], level: [], location: [],
+};
 
 export interface SettingsResponse {
   sessdata: string; ai_base_url: string;

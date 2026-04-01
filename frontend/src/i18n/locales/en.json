@@ -64,6 +64,9 @@
       "male": "Male",
       "female": "Female",
       "secret": "Secret"
-    }
+    },
+    "clearFilter": "Clear Filters",
+    "applyFilter": "Apply Filter",
+    "filtered": "{{count}} users (filtered)"
   }
 }

@@ -1,6 +1,17 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
+
+function buildFilterParams(filter?: DemographicsFilter): string {
+  if (!filter) return "";
+  const params = new URLSearchParams();
+  if (filter.gender.length) params.set("gender", filter.gender.join(","));
+  if (filter.vip.length) params.set("vip", filter.vip.join(","));
+  if (filter.level.length) params.set("level", filter.level.join(","));
+  if (filter.location.length) params.set("location", filter.location.join(","));
+  const qs = params.toString();
+  return qs ? `${qs}` : "";
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${BASE}${path}`, {
@@ -46,13 +57,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  getWordFrequency: (queryId: number, type: string) =>
-    request<WordFrequencyResponse>(`/queries/${queryId}/wordcloud/${type}`),
-  getVideoWordFrequency: (bvid: string, type: string) =>
-    request<WordFrequencyResponse>(`/videos/${bvid}/wordcloud/${type}`),
-  getWordDetail: (queryId: number, type: string, word: string) =>
-    request<WordDetailResponse>(`/queries/${queryId}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}`),
-  getVideoWordDetail: (bvid: string, type: string, word: string) =>
-    request<WordDetailResponse>(`/videos/${bvid}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}`),
+  getWordFrequency: (queryId: number, type: string, filter?: DemographicsFilter) => {
+    const fp = buildFilterParams(filter);
+    return request<WordFrequencyResponse>(`/queries/${queryId}/wordcloud/${type}${fp ? `?${fp}` : ""}`);
+  },
+  getVideoWordFrequency: (bvid: string, type: string, filter?: DemographicsFilter) => {
+    const fp = buildFilterParams(filter);
+    return request<WordFrequencyResponse>(`/videos/${bvid}/wordcloud/${type}${fp ? `?${fp}` : ""}`);
+  },
+  getWordDetail: (queryId: number, type: string, word: string, filter?: DemographicsFilter) => {
+    const fp = buildFilterParams(filter);
+    const sep = fp ? `&${fp}` : "";
+    return request<WordDetailResponse>(`/queries/${queryId}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}${sep}`);
+  },
+  getVideoWordDetail: (bvid: string, type: string, word: string, filter?: DemographicsFilter) => {
+    const fp = buildFilterParams(filter);
+    const sep = fp ? `&${fp}` : "";
+    return request<WordDetailResponse>(`/videos/${bvid}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}${sep}`);
+  },
   aiAnalyzeUrl: (queryId: number) => `${BASE}/queries/${queryId}/ai/analyze`,
 };

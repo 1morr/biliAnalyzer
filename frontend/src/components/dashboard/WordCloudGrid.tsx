@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { WordFrequencyItem, WordDetailResponse } from "@/types";
+import type { WordFrequencyItem, WordDetailResponse, DemographicsFilter } from "@/types";
 import WordCloudChart from "@/components/shared/WordCloudChart";
 import WordDetailPanel from "@/components/shared/WordDetailPanel";
 
 interface WordCloudGridProps {
   queryId: number;
+  filter?: DemographicsFilter;
 }
 
 type ContentCloudMode = "all" | "title" | "tag" | "subtitle";
@@ -49,25 +50,48 @@ function QueryCloudBody({
   type,
   height,
   showVideoBreakdown,
+  filter,
 }: {
   queryId: number;
   type: QueryCloudType;
   height: number;
   showVideoBreakdown: boolean;
+  filter?: DemographicsFilter;
 }) {
   const [words, setWords] = useState<WordFrequencyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // Determine if this type should use demographic filters
+  const isFilterable = type === "user" || type === "comment";
+  const activeFilter = isFilterable ? filter : undefined;
+  const hasFilter = activeFilter && (activeFilter.gender.length > 0 || activeFilter.vip.length > 0 || activeFilter.level.length > 0 || activeFilter.location.length > 0);
+  const filterKey = hasFilter ? JSON.stringify(activeFilter) : "";
+
+  // Debounced fetch for filter changes
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   useEffect(() => {
     let active = true;
-    api.getWordFrequency(queryId, type)
-      .then((d) => { if (active) setWords(d.words); })
-      .catch(() => {})
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [queryId, type]);
+    const doFetch = () => {
+      setLoading(true);
+      api.getWordFrequency(queryId, type, hasFilter ? activeFilter : undefined)
+        .then((d) => { if (active) setWords(d.words); })
+        .catch(() => {})
+        .finally(() => { if (active) setLoading(false); });
+    };
+
+    if (filterKey) {
+      // Debounce filter-triggered fetches
+      clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(doFetch, 300);
+    } else {
+      doFetch();
+    }
+
+    return () => { active = false; clearTimeout(debounceRef.current); };
+  }, [queryId, type, filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleWordClick = useCallback((word: string) => {
     setSelectedWord(word);
@@ -75,8 +99,8 @@ function QueryCloudBody({
   }, []);
 
   const fetchDetail = useCallback(
-    (w: string): Promise<WordDetailResponse> => api.getWordDetail(queryId, type, w),
-    [queryId, type],
+    (w: string): Promise<WordDetailResponse> => api.getWordDetail(queryId, type, w, hasFilter ? activeFilter : undefined),
+    [queryId, type, filterKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (
@@ -125,7 +149,7 @@ function ContentCloudPanel({ queryId }: { queryId: number }) {
   );
 }
 
-function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: SimpleCloudType; labelKey: string }) {
+function CloudPanel({ queryId, type, labelKey, filter }: { queryId: number; type: SimpleCloudType; labelKey: string; filter?: DemographicsFilter }) {
   const { t } = useTranslation();
 
   return (
@@ -137,6 +161,7 @@ function CloudPanel({ queryId, type, labelKey }: { queryId: number; type: Simple
         type={type}
         height={240}
         showVideoBreakdown={true}
+        filter={filter}
       />
     </div>
   );
@@ -173,11 +198,11 @@ function InteractionCloudPanel({ queryId }: { queryId: number }) {
   );
 }
 
-export default function WordCloudGrid({ queryId }: WordCloudGridProps) {
+export default function WordCloudGrid({ queryId, filter }: WordCloudGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
-      <CloudPanel queryId={queryId} type="user" labelKey="chart.wordcloud.user" />
-      <CloudPanel queryId={queryId} type="comment" labelKey="chart.wordcloud.comment" />
+      <CloudPanel queryId={queryId} type="user" labelKey="chart.wordcloud.user" filter={filter} />
+      <CloudPanel queryId={queryId} type="comment" labelKey="chart.wordcloud.comment" filter={filter} />
       <ContentCloudPanel queryId={queryId} />
       <InteractionCloudPanel queryId={queryId} />
     </div>
