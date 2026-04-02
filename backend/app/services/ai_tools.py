@@ -1,5 +1,6 @@
 """OpenAI function-calling tool definitions and executor for the AI agent."""
 import json
+import random
 from collections import Counter, defaultdict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,12 +32,44 @@ TOOL_GET_VIEWS_TREND = {
     },
 }
 
-TOOL_GET_INTERACTION_DATA = {
+TOOL_LIST_QUERY_VIDEOS = {
     "type": "function",
     "function": {
-        "name": "get_interaction_data",
-        "description": "Get total interaction metrics: likes, coins, favorites, shares.",
+        "name": "list_query_videos",
+        "description": "List all videos in the current query with basic stats. Returns bvid, title, published_at, duration, views, likes, coins, favorites, shares, danmaku_count, comment_count for each video, sorted by publish date descending. No parameters needed — uses the current query context.",
         "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+}
+
+TOOL_GET_SAMPLE_COMMENTS = {
+    "type": "function",
+    "function": {
+        "name": "get_sample_comments",
+        "description": "Get sample comments or danmaku texts. Use this to read what users actually said — for qualitative analysis, quoting user feedback, or understanding audience sentiment in their own words.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["comment", "danmaku"],
+                    "description": "Type of content to sample",
+                },
+                "bvid": {
+                    "type": "string",
+                    "description": "Optional: sample from a specific video. If omitted, samples across all videos in the query.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of items to return (default 20, max 50)",
+                },
+                "sort_by": {
+                    "type": "string",
+                    "enum": ["likes", "newest"],
+                    "description": "Sort order for comments (ignored for danmaku). Default: likes",
+                },
+            },
+            "required": ["source"],
+        },
     },
 }
 
@@ -70,8 +103,17 @@ TOOL_GET_VIDEO_COMPARISON = {
     "type": "function",
     "function": {
         "name": "get_video_comparison",
-        "description": "Compare a specific video's stats against the query average and max. Requires bvid context.",
-        "parameters": {"type": "object", "properties": {}, "required": []},
+        "description": "Compare a specific video's stats against the query average. Returns each metric with video value, average, and diff percentage.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "bvid": {
+                    "type": "string",
+                    "description": "The video BV number to compare. If omitted, uses the current video context.",
+                },
+            },
+            "required": [],
+        },
     },
 }
 
@@ -80,7 +122,16 @@ TOOL_GET_DEMOGRAPHICS_SUMMARY = {
     "function": {
         "name": "get_demographics_summary",
         "description": "Get audience demographics: gender, VIP, user level, and location distributions.",
-        "parameters": {"type": "object", "properties": {}, "required": []},
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "bvid": {
+                    "type": "string",
+                    "description": "Analyze a specific video's audience. If omitted, analyzes all videos in the query.",
+                },
+            },
+            "required": [],
+        },
     },
 }
 
@@ -97,6 +148,10 @@ TOOL_GET_WORD_FREQUENCIES = {
                     "enum": ["title", "tag", "danmaku", "comment", "subtitle"],
                     "description": "Which text source to analyze",
                 },
+                "bvid": {
+                    "type": "string",
+                    "description": "Analyze a specific video. If omitted, analyzes all videos in the query.",
+                },
             },
             "required": ["source"],
         },
@@ -108,7 +163,16 @@ TOOL_GET_SENTIMENT_OVERVIEW = {
     "function": {
         "name": "get_sentiment_overview",
         "description": "Get sentiment analysis overview: average score and positive/neutral/negative percentages for danmaku and comments.",
-        "parameters": {"type": "object", "properties": {}, "required": []},
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "bvid": {
+                    "type": "string",
+                    "description": "Analyze a specific video's sentiment. If omitted, analyzes all videos in the query.",
+                },
+            },
+            "required": [],
+        },
     },
 }
 
@@ -170,10 +234,10 @@ TOOL_EXECUTE_SQL = {
 
 # All tools available to the AI agent
 ALL_TOOLS = [
-    TOOL_GET_STATS_SUMMARY, TOOL_GET_VIEWS_TREND, TOOL_GET_INTERACTION_DATA,
+    TOOL_LIST_QUERY_VIDEOS, TOOL_GET_STATS_SUMMARY, TOOL_GET_VIEWS_TREND,
     TOOL_GET_TOP_VIDEOS, TOOL_GET_VIDEO_COMPARISON, TOOL_GET_DEMOGRAPHICS_SUMMARY,
     TOOL_GET_WORD_FREQUENCIES, TOOL_GET_SENTIMENT_OVERVIEW, TOOL_GET_VIDEO_DETAIL,
-    TOOL_LIST_QUERIES, TOOL_EXECUTE_SQL,
+    TOOL_GET_SAMPLE_COMMENTS, TOOL_LIST_QUERIES, TOOL_EXECUTE_SQL,
 ]
 
 
@@ -216,25 +280,27 @@ async def execute_tool(
     bvid = context.get("bvid")
 
     try:
-        if name == "get_stats_summary":
+        if name == "list_query_videos":
+            return await _exec_list_query_videos(db, query_id)
+        elif name == "get_stats_summary":
             return await _exec_stats_summary(db, query_id)
         elif name == "get_views_trend":
             return await _exec_views_trend(db, query_id)
-        elif name == "get_interaction_data":
-            return await _exec_interaction_data(db, query_id)
         elif name == "get_top_videos":
             return await _exec_top_videos(db, query_id, arguments)
         elif name == "get_video_comparison":
-            return await _exec_video_comparison(db, query_id, bvid)
+            return await _exec_video_comparison(db, query_id, arguments.get("bvid") or bvid)
         elif name == "get_demographics_summary":
-            return await _exec_demographics(db, query_id, bvid)
+            return await _exec_demographics(db, query_id, arguments.get("bvid") or bvid)
         elif name == "get_word_frequencies":
-            return await _exec_word_frequencies(db, query_id, bvid, arguments)
+            return await _exec_word_frequencies(db, query_id, arguments.get("bvid") or bvid, arguments)
         elif name == "get_sentiment_overview":
-            return await _exec_sentiment_overview(db, query_id, bvid)
+            return await _exec_sentiment_overview(db, query_id, arguments.get("bvid") or bvid)
         elif name == "get_video_detail":
             target_bvid = arguments.get("bvid") or bvid
             return await _exec_video_detail(db, target_bvid)
+        elif name == "get_sample_comments":
+            return await _exec_sample_comments(db, query_id, bvid, arguments)
         elif name == "list_queries":
             return await _exec_list_queries(db)
         elif name == "execute_sql":
@@ -273,6 +339,27 @@ async def _get_latest_stats(db: AsyncSession, query_id: int) -> dict[str, tuple]
     return latest
 
 
+async def _exec_list_query_videos(db: AsyncSession, query_id: int | None) -> str:
+    if not query_id:
+        return json.dumps({"error": "No query context"})
+    latest = await _get_latest_stats(db, query_id)
+    if not latest:
+        return json.dumps([])
+
+    items = []
+    for video, stats in latest.values():
+        items.append({
+            "bvid": video.bvid, "title": video.title,
+            "published_at": video.published_at.isoformat() if video.published_at else None,
+            "duration": video.duration,
+            "views": stats.views, "likes": stats.likes, "coins": stats.coins,
+            "favorites": stats.favorites, "shares": stats.shares,
+            "danmaku_count": stats.danmaku_count, "comment_count": stats.comment_count,
+        })
+    items.sort(key=lambda x: x["published_at"] or "", reverse=True)
+    return json.dumps(items, ensure_ascii=False)
+
+
 async def _exec_views_trend(db: AsyncSession, query_id: int | None) -> str:
     latest = await _get_latest_stats(db, query_id)
     if not latest:
@@ -302,16 +389,6 @@ async def _exec_views_trend(db: AsyncSession, query_id: int | None) -> str:
             bucket[key] += stats.views
 
     return json.dumps([{"date": k, "views": v} for k, v in sorted(bucket.items())])
-
-
-async def _exec_interaction_data(db: AsyncSession, query_id: int | None) -> str:
-    query = await db.get(Query, query_id)
-    if not query:
-        return json.dumps({"error": "Query not found"})
-    return json.dumps({
-        "likes": query.total_likes, "coins": query.total_coins,
-        "favorites": query.total_favorites, "shares": query.total_shares,
-    })
 
 
 async def _exec_top_videos(db: AsyncSession, query_id: int | None, args: dict) -> str:
@@ -495,6 +572,65 @@ async def _exec_video_detail(db: AsyncSession, bvid: str | None) -> str:
             "danmaku_count": stats.danmaku_count, "comment_count": stats.comment_count,
         })
     return json.dumps(data, ensure_ascii=False)
+
+
+async def _exec_sample_comments(
+    db: AsyncSession, query_id: int | None, bvid_ctx: str | None, args: dict,
+) -> str:
+    source = args.get("source", "comment")
+    target_bvid = args.get("bvid") or bvid_ctx
+    limit = min(args.get("limit", 20), 50)
+    sort_by = args.get("sort_by", "likes")
+
+    # Gather VideoContent rows
+    if target_bvid:
+        result = await db.execute(select(VideoContent).where(VideoContent.bvid == target_bvid))
+        contents = [(target_bvid, result.scalar_one_or_none())]
+    elif query_id:
+        result = await db.execute(
+            select(VideoContent)
+            .join(QueryVideo, QueryVideo.bvid == VideoContent.bvid)
+            .where(QueryVideo.query_id == query_id)
+        )
+        contents = [(c.bvid, c) for c in result.scalars().all()]
+    else:
+        return json.dumps({"error": "No context"})
+
+    if source == "comment":
+        all_comments = []
+        for bvid, content in contents:
+            if not content or not content.comments:
+                continue
+            for item in _safe_json_loads(content.comments):
+                if isinstance(item, dict) and item.get("text"):
+                    all_comments.append({
+                        "text": item["text"],
+                        "user": item.get("user", ""),
+                        "likes": item.get("likes", 0),
+                        "reply_count": item.get("reply_count", 0),
+                        "up_liked": item.get("up_liked", False),
+                        "up_replied": item.get("up_replied", False),
+                        "bvid": bvid,
+                    })
+        if sort_by == "likes":
+            all_comments.sort(key=lambda x: x.get("likes", 0), reverse=True)
+        # "newest" keeps original order (already chronological from API)
+        return json.dumps(all_comments[:limit], ensure_ascii=False)
+
+    elif source == "danmaku":
+        all_danmaku = []
+        for bvid, content in contents:
+            if not content or not content.danmakus:
+                continue
+            for item in _safe_json_loads(content.danmakus):
+                text = item if isinstance(item, str) else (item.get("text", "") if isinstance(item, dict) else "")
+                if text:
+                    all_danmaku.append({"text": text, "bvid": bvid})
+        if len(all_danmaku) > limit:
+            all_danmaku = random.sample(all_danmaku, limit)
+        return json.dumps(all_danmaku, ensure_ascii=False)
+
+    return json.dumps({"error": f"Unknown source: {source}"})
 
 
 async def _exec_list_queries(db: AsyncSession) -> str:

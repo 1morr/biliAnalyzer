@@ -139,7 +139,15 @@ async def _create_conversation_stream(
     await db.flush()
 
     # Save system + initial user messages
-    system_content = get_system_prompt(lang, query_id=query_id, bvid=bvid)
+    system_content = get_system_prompt(lang, query_id=query_id, bvid=bvid, query_meta=(
+        {
+            "user_name": query.user_name,
+            "video_count": query.video_count,
+            "start_date": query.start_date.isoformat() if query.start_date else None,
+            "end_date": query.end_date.isoformat() if query.end_date else None,
+            "total_views": query.total_views,
+        } if query_id is not None and query else None
+    ))
     initial_msg = body.content if (preset == "free_chat" and body.content) else get_initial_message(preset)
     user_provided = preset == "free_chat" and body.content
     await save_message(db, conv.id, "system", content=system_content)
