@@ -1,4 +1,4 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter, SentimentOverview, SentimentTrendPoint, SentimentWordItem, DemographicSentimentCell } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter, SentimentOverview, SentimentTrendPoint, SentimentWordItem, DemographicSentimentCell, SentimentContextResponse } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -86,4 +86,14 @@ export const api = {
     request<SentimentWordItem[]>(`/videos/${bvid}/sentiment/wordcloud/${source}?limit=${limit}`),
   getVideoSentimentDemographics: (bvid: string) =>
     request<DemographicSentimentCell[]>(`/videos/${bvid}/sentiment/demographics`),
+
+  // Sentiment contexts
+  getSentimentContexts: (queryId: number, params: Record<string, string>) => {
+    const qs = new URLSearchParams(params).toString();
+    return request<SentimentContextResponse>(`/queries/${queryId}/sentiment/contexts?${qs}`);
+  },
+  getVideoSentimentContexts: (bvid: string, params: Record<string, string>) => {
+    const qs = new URLSearchParams(params).toString();
+    return request<SentimentContextResponse>(`/videos/${bvid}/sentiment/contexts?${qs}`);
+  },
 };

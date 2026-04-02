@@ -5,12 +5,13 @@ import type { DemographicSentimentCell } from "@/types";
 
 interface Props {
   data: DemographicSentimentCell[];
+  onCellClick?: (dimension: string, category: string) => void;
 }
 
 const DIMENSION_ORDER = ["gender", "level", "vip", "location"];
 const COLORS = { positive: "#22c55e", neutral: "#94a3b8", negative: "#ef4444" };
 
-export default function DemographicSentimentMatrix({ data }: Props) {
+export default function DemographicSentimentMatrix({ data, onCellClick }: Props) {
   const { t } = useTranslation();
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -124,6 +125,13 @@ export default function DemographicSentimentMatrix({ data }: Props) {
                 <ReactECharts
                   option={option}
                   style={{ height: chartHeight }}
+                  onEvents={{
+                    click: (params: { name?: string }) => {
+                      if (params.name && onCellClick) {
+                        onCellClick(dimension, params.name);
+                      }
+                    },
+                  }}
                 />
               </div>
             </div>

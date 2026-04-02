@@ -160,3 +160,16 @@ export interface DemographicSentimentCell {
   negative_pct: number;
   count: number;
 }
+
+export interface SentimentContextItem {
+  text: string;
+  user: string | null;
+  score: number;
+  label: string;
+  source: string | null;
+}
+
+export interface SentimentContextResponse {
+  total_count: number;
+  items: SentimentContextItem[];
+}

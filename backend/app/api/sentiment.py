@@ -8,11 +8,12 @@ from app.models import Query, QueryVideo, Video, VideoSentiment
 from app.schemas.sentiment import (
     SentimentOverview, SentimentDistribution, SentimentTrendPoint,
     SentimentWordItem, DemographicSentimentCell,
+    SentimentContextResponse,
 )
 from app.services.sentiment_svc import (
     compute_sentiment_distribution, compute_sentiment_trend,
     compute_sentiment_word_cloud, compute_demographic_sentiment_matrix,
-    _safe_json_loads,
+    filter_sentiment_contexts, _safe_json_loads,
 )
 from app.services.sentiment_task import run_sentiment_analysis
 
@@ -110,6 +111,27 @@ async def query_sentiment_demographics(query_id: int, db: AsyncSession = Depends
     return [DemographicSentimentCell(**c) for c in cells]
 
 
+@router.get("/queries/{query_id}/sentiment/contexts", response_model=SentimentContextResponse)
+async def query_sentiment_contexts(
+    query_id: int,
+    word: str | None = QueryParam(None),
+    source: str | None = QueryParam(None),
+    label: str | None = QueryParam(None),
+    dimension: str | None = QueryParam(None),
+    category: str | None = QueryParam(None),
+    limit: int = QueryParam(50),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_query_or_404(db, query_id)
+    sentiments = await _get_query_sentiments(db, query_id)
+    all_details = _collect_details(sentiments)
+    result = filter_sentiment_contexts(
+        all_details, word=word, source=source, label=label,
+        dimension=dimension, category=category, limit=limit,
+    )
+    return SentimentContextResponse(**result)
+
+
 # --- Video-level endpoints ---
 
 @router.get("/videos/{bvid}/sentiment/overview", response_model=SentimentOverview)
@@ -153,6 +175,28 @@ async def video_sentiment_demographics(bvid: str, db: AsyncSession = Depends(get
     details = _safe_json_loads(sentiment.details)
     cells = compute_demographic_sentiment_matrix(details)
     return [DemographicSentimentCell(**c) for c in cells]
+
+
+@router.get("/videos/{bvid}/sentiment/contexts", response_model=SentimentContextResponse)
+async def video_sentiment_contexts(
+    bvid: str,
+    word: str | None = QueryParam(None),
+    source: str | None = QueryParam(None),
+    label: str | None = QueryParam(None),
+    dimension: str | None = QueryParam(None),
+    category: str | None = QueryParam(None),
+    limit: int = QueryParam(50),
+    db: AsyncSession = Depends(get_db),
+):
+    sentiment = await _get_video_sentiment(db, bvid)
+    if not sentiment:
+        raise HTTPException(status_code=404, detail="No sentiment data")
+    details = _safe_json_loads(sentiment.details)
+    result = filter_sentiment_contexts(
+        details, word=word, source=source, label=label,
+        dimension=dimension, category=category, limit=limit,
+    )
+    return SentimentContextResponse(**result)
 
 
 # --- Manual trigger ---

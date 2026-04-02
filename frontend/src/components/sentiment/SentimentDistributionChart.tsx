@@ -6,20 +6,21 @@ import type { SentimentDistribution } from "@/types";
 interface Props {
   danmaku: SentimentDistribution | null;
   comment: SentimentDistribution | null;
+  onSegmentClick?: (label: string, source: string) => void;
 }
 
 const COLORS = { positive: "#22c55e", neutral: "#94a3b8", negative: "#ef4444" };
 
-export default function SentimentDistributionChart({ danmaku, comment }: Props) {
+export default function SentimentDistributionChart({ danmaku, comment, onSegmentClick }: Props) {
   const { t } = useTranslation();
   const isDark = document.documentElement.classList.contains("dark");
 
   const makePieData = (dist: SentimentDistribution | null) => {
     if (!dist || dist.count === 0) return [];
     return [
-      { name: t("sentiment.positive"), value: dist.positive_pct, itemStyle: { color: COLORS.positive } },
-      { name: t("sentiment.neutral"), value: dist.neutral_pct, itemStyle: { color: COLORS.neutral } },
-      { name: t("sentiment.negative"), value: dist.negative_pct, itemStyle: { color: COLORS.negative } },
+      { name: t("sentiment.positive"), value: dist.positive_pct, labelKey: "positive", itemStyle: { color: COLORS.positive } },
+      { name: t("sentiment.neutral"), value: dist.neutral_pct, labelKey: "neutral", itemStyle: { color: COLORS.neutral } },
+      { name: t("sentiment.negative"), value: dist.negative_pct, labelKey: "negative", itemStyle: { color: COLORS.negative } },
     ];
   };
 
@@ -45,11 +46,12 @@ export default function SentimentDistributionChart({ danmaku, comment }: Props) 
           show: true,
           position: "center",
           formatter: danmaku && danmaku.count > 0
-            ? `{a|${(danmaku.avg_score * 100).toFixed(0)}}\n{b|${t("sentiment.danmakuLabel")}}`
+            ? `{a|${(danmaku.avg_score * 100).toFixed(0)}}{c|分}\n{b|${t("sentiment.danmakuLabel")}}`
             : `{b|${t("common.noData")}}`,
           rich: {
             a: { fontSize: 16, fontWeight: "bold", color: isDark ? "#e5e7eb" : "#1f2937", lineHeight: 22 },
             b: { fontSize: 10, color: isDark ? "#9ca3af" : "#6b7280", lineHeight: 16 },
+            c: { fontSize: 10, color: isDark ? "#9ca3af" : "#6b7280", lineHeight: 22 },
           },
         },
         emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.3)" } },
@@ -64,11 +66,12 @@ export default function SentimentDistributionChart({ danmaku, comment }: Props) 
           show: true,
           position: "center",
           formatter: comment && comment.count > 0
-            ? `{a|${(comment.avg_score * 100).toFixed(0)}}\n{b|${t("sentiment.commentLabel")}}`
+            ? `{a|${(comment.avg_score * 100).toFixed(0)}}{c|分}\n{b|${t("sentiment.commentLabel")}}`
             : `{b|${t("common.noData")}}`,
           rich: {
             a: { fontSize: 16, fontWeight: "bold", color: isDark ? "#e5e7eb" : "#1f2937", lineHeight: 22 },
             b: { fontSize: 10, color: isDark ? "#9ca3af" : "#6b7280", lineHeight: 16 },
+            c: { fontSize: 10, color: isDark ? "#9ca3af" : "#6b7280", lineHeight: 22 },
           },
         },
         emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.3)" } },
@@ -76,10 +79,22 @@ export default function SentimentDistributionChart({ danmaku, comment }: Props) 
     ],
   }), [danmaku, comment, isDark, t]);
 
+  const danmakuSeriesName = t("sentiment.danmakuSentiment");
+
   return (
     <div>
       <p className="mb-2 text-sm font-medium text-foreground">{t("sentiment.distribution")}</p>
-      <ReactECharts option={option} style={{ height: 200 }} />
+      <ReactECharts
+        option={option}
+        style={{ height: 200 }}
+        onEvents={{
+          click: (params: { seriesName?: string; data?: { labelKey?: string } }) => {
+            if (!onSegmentClick || !params.data?.labelKey) return;
+            const source = params.seriesName === danmakuSeriesName ? "danmaku" : "comment";
+            onSegmentClick(params.data.labelKey, source);
+          },
+        }}
+      />
     </div>
   );
 }

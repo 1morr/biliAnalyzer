@@ -38,3 +38,16 @@ class DemographicSentimentCell(BaseModel):
     neutral_pct: float
     negative_pct: float
     count: int
+
+
+class SentimentContextItem(BaseModel):
+    text: str
+    user: str | None = None
+    score: float
+    label: str
+    source: str | None = None
+
+
+class SentimentContextResponse(BaseModel):
+    total_count: int
+    items: list[SentimentContextItem]

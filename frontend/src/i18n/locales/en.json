@@ -96,6 +96,9 @@
       "level": "Level",
       "vip": "VIP",
       "location": "Location"
-    }
+    },
+    "contexts": "Contexts",
+    "contextCount": "{{count}} items",
+    "score": "Score"
   }
 }

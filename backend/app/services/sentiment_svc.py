@@ -138,6 +138,54 @@ def compute_sentiment_word_cloud(details: list[dict], source: str, limit: int = 
     return result
 
 
+def filter_sentiment_contexts(
+    details: list[dict],
+    word: str | None = None,
+    source: str | None = None,
+    label: str | None = None,
+    dimension: str | None = None,
+    category: str | None = None,
+    limit: int = 50,
+) -> dict:
+    """Filter detail items by various criteria and return matching contexts."""
+    items = details
+
+    if source:
+        items = [d for d in items if d.get("source") == source]
+    if label:
+        items = [d for d in items if d.get("label") == label]
+    if word:
+        items = [d for d in items if word in d.get("text", "")]
+
+    if dimension and category:
+        normalizers = {
+            "gender": lambda d: _normalize_gender(d.get("user_sex")),
+            "level": lambda d: _normalize_level(d.get("user_level")),
+            "vip": lambda d: _normalize_vip(d.get("vip_status"), d.get("vip_type")),
+            "location": lambda d: _normalize_location(d.get("location")) or "未知",
+        }
+        norm = normalizers.get(dimension)
+        if norm:
+            items = [d for d in items if norm(d) == category]
+
+    total_count = len(items)
+    items = items[:limit]
+
+    return {
+        "total_count": total_count,
+        "items": [
+            {
+                "text": d.get("text", ""),
+                "user": d.get("user"),
+                "score": d.get("score", 0),
+                "label": d.get("label", "neutral"),
+                "source": d.get("source"),
+            }
+            for d in items
+        ],
+    }
+
+
 def compute_demographic_sentiment_matrix(details: list[dict]) -> list[dict]:
     """Cross-analyze sentiment by demographic dimensions.
 

@@ -9,6 +9,7 @@ interface Props {
   danmakuWords: SentimentWordItem[];
   commentWords: SentimentWordItem[];
   loading: boolean;
+  onWordClick?: (word: string, source: string) => void;
 }
 
 function scoreToColor(score: number, isDark: boolean): string {
@@ -28,7 +29,7 @@ function scoreToColor(score: number, isDark: boolean): string {
   }
 }
 
-export default function SentimentWordCloud({ danmakuWords, commentWords, loading }: Props) {
+export default function SentimentWordCloud({ danmakuWords, commentWords, loading, onWordClick }: Props) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string[]>(["danmaku"]);
   const isDark = document.documentElement.classList.contains("dark");
@@ -102,7 +103,17 @@ export default function SentimentWordCloud({ danmakuWords, commentWords, loading
           {t("common.noData")}
         </div>
       ) : (
-        <ReactECharts option={option} style={{ height: 200 }} />
+        <ReactECharts
+          option={option}
+          style={{ height: 200 }}
+          onEvents={{
+            click: (params: { name?: string }) => {
+              if (params.name && onWordClick) {
+                onWordClick(params.name, source[0]);
+              }
+            },
+          }}
+        />
       )}
     </div>
   );

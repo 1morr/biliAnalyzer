@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type {
@@ -6,12 +6,14 @@ import type {
   SentimentTrendPoint,
   SentimentWordItem,
   DemographicSentimentCell,
+  SentimentContextResponse,
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import SentimentDistributionChart from "./SentimentDistributionChart";
 import SentimentTrendChart from "./SentimentTrendChart";
 import SentimentWordCloud from "./SentimentWordCloud";
 import DemographicSentimentMatrix from "./DemographicSentimentMatrix";
+import SentimentContextPanel from "./SentimentContextPanel";
 
 interface Props {
   queryId?: number;
@@ -28,6 +30,15 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Context drawer state
+  const [contextOpen, setContextOpen] = useState(false);
+  const [contextTitle, setContextTitle] = useState("");
+  const [contextSubtitle, setContextSubtitle] = useState<string | undefined>();
+  const [contextHighlightWord, setContextHighlightWord] = useState<string | undefined>();
+  const [contextFetcher, setContextFetcher] = useState<() => Promise<SentimentContextResponse>>(
+    () => () => Promise.resolve({ total_count: 0, items: [] }),
+  );
 
   const isQuery = queryId != null;
 
@@ -124,6 +135,45 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     }
   }
 
+  const handleWordClick = useCallback((word: string, source: string) => {
+    const params: Record<string, string> = { word, source };
+    setContextTitle(word);
+    setContextSubtitle(t(`chart.wordcloud.source.${source}`));
+    setContextHighlightWord(word);
+    setContextFetcher(() => () =>
+      isQuery
+        ? api.getSentimentContexts(queryId!, params)
+        : api.getVideoSentimentContexts(bvid!, params),
+    );
+    setContextOpen(true);
+  }, [isQuery, queryId, bvid, t]);
+
+  const handleCellClick = useCallback((dimension: string, category: string) => {
+    const params: Record<string, string> = { dimension, category };
+    setContextTitle(`${t(`sentiment.dim.${dimension}`)}: ${category}`);
+    setContextSubtitle(undefined);
+    setContextHighlightWord(undefined);
+    setContextFetcher(() => () =>
+      isQuery
+        ? api.getSentimentContexts(queryId!, params)
+        : api.getVideoSentimentContexts(bvid!, params),
+    );
+    setContextOpen(true);
+  }, [isQuery, queryId, bvid, t]);
+
+  const handleSegmentClick = useCallback((label: string, source: string) => {
+    const params: Record<string, string> = { label, source };
+    setContextTitle(t(`sentiment.${label}`));
+    setContextSubtitle(t(`chart.wordcloud.source.${source}`));
+    setContextHighlightWord(undefined);
+    setContextFetcher(() => () =>
+      isQuery
+        ? api.getSentimentContexts(queryId!, params)
+        : api.getVideoSentimentContexts(bvid!, params),
+    );
+    setContextOpen(true);
+  }, [isQuery, queryId, bvid, t]);
+
   // Not analyzed yet
   if (!overview || overview.status === null) {
     if (!isQuery) return null; // Video without data: hide panel
@@ -179,11 +229,12 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <SentimentDistributionChart danmaku={overview.danmaku} comment={overview.comment} />
+            <SentimentDistributionChart danmaku={overview.danmaku} comment={overview.comment} onSegmentClick={handleSegmentClick} />
             <SentimentWordCloud
               danmakuWords={danmakuWords}
               commentWords={commentWords}
               loading={false}
+              onWordClick={handleWordClick}
             />
           </div>
 
@@ -192,10 +243,19 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
           )}
 
           {demographics.length > 0 && (
-            <DemographicSentimentMatrix data={demographics} />
+            <DemographicSentimentMatrix data={demographics} onCellClick={handleCellClick} />
           )}
         </>
       )}
+
+      <SentimentContextPanel
+        open={contextOpen}
+        onOpenChange={setContextOpen}
+        title={contextTitle}
+        subtitle={contextSubtitle}
+        highlightWord={contextHighlightWord}
+        fetchContexts={contextFetcher}
+      />
     </div>
   );
 }
