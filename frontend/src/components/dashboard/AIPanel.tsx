@@ -41,7 +41,7 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
   const [currentConvId, setCurrentConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AIMessageItem[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
-  const [activeTools, setActiveTools] = useState<ToolCallInfo[]>([]);
+  const [, setActiveTools] = useState<ToolCallInfo[]>([]);
   const [usedTools, setUsedTools] = useState<ToolCallInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -341,7 +341,6 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
             <AIConversationView
               messages={messages}
               streamingContent={streamingContent}
-              activeTools={activeTools}
               usedTools={usedTools}
               isStreaming={state === "streaming"}
               scrollContainerRef={scrollContainerRef}

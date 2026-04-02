@@ -8,7 +8,6 @@ import type { AIMessageItem, ToolCallInfo } from "@/types";
 interface AIConversationViewProps {
   messages: AIMessageItem[];
   streamingContent: string;
-  activeTools: ToolCallInfo[];
   usedTools: ToolCallInfo[];
   isStreaming: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
@@ -78,7 +77,7 @@ function ToolBadgeList({ tools }: { tools: ToolCallInfo[] }) {
 }
 
 export default function AIConversationView({
-  messages, streamingContent, activeTools, usedTools, isStreaming, scrollContainerRef,
+  messages, streamingContent, usedTools, isStreaming, scrollContainerRef,
 }: AIConversationViewProps) {
   const { t } = useTranslation();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -115,7 +114,7 @@ export default function AIConversationView({
     if (isNearBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, streamingContent, activeTools, usedTools]);
+  }, [messages, streamingContent, usedTools]);
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3">
@@ -165,14 +164,6 @@ export default function AIConversationView({
               <p className="text-muted-foreground animate-pulse">{t("ai.analyzing")}</p>
             ) : null}
           </div>
-        </div>
-      )}
-
-      {/* Live tool activity indicator */}
-      {activeTools.length > 0 && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse pl-6">
-          <WrenchIcon className="size-3" />
-          {t("ai.toolQuerying")}: {activeTools.map((t) => t.name).join(", ")}
         </div>
       )}
 
