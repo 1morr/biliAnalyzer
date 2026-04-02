@@ -1,13 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
 import "echarts-wordcloud";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SentimentWordItem } from "@/types";
 
 interface Props {
-  danmakuWords: SentimentWordItem[];
-  commentWords: SentimentWordItem[];
+  words: SentimentWordItem[];
+  label: string;
+  source: string;
   loading: boolean;
   onWordClick?: (word: string, source: string) => void;
 }
@@ -29,12 +29,9 @@ function scoreToColor(score: number, isDark: boolean): string {
   }
 }
 
-export default function SentimentWordCloud({ danmakuWords, commentWords, loading, onWordClick }: Props) {
+export default function SentimentWordCloud({ words, label, source, loading, onWordClick }: Props) {
   const { t } = useTranslation();
-  const [source, setSource] = useState<string[]>(["danmaku"]);
   const isDark = document.documentElement.classList.contains("dark");
-
-  const words = source[0] === "comment" ? commentWords : danmakuWords;
 
   const option = useMemo(() => {
     const colorMap = new Map(words.map((w) => [w.name, scoreToColor(w.avg_score, isDark)]));
@@ -87,17 +84,7 @@ export default function SentimentWordCloud({ danmakuWords, commentWords, loading
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{t("sentiment.wordcloud")}</p>
-        <ToggleGroup value={source} onValueChange={(v) => v.length > 0 && setSource(v)} size="sm">
-          <ToggleGroupItem value="danmaku" className="text-xs px-2 h-7">
-            {t("chart.wordcloud.danmaku")}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="comment" className="text-xs px-2 h-7">
-            {t("chart.wordcloud.comment")}
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{label}</p>
       {words.length === 0 ? (
         <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
           {t("common.noData")}
@@ -109,7 +96,7 @@ export default function SentimentWordCloud({ danmakuWords, commentWords, loading
           onEvents={{
             click: (params: { name?: string }) => {
               if (params.name && onWordClick) {
-                onWordClick(params.name, source[0]);
+                onWordClick(params.name, source);
               }
             },
           }}

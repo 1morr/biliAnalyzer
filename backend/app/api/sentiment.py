@@ -93,12 +93,12 @@ async def query_sentiment_wordcloud(
     limit: int = QueryParam(100),
     db: AsyncSession = Depends(get_db),
 ):
-    if source not in ("danmaku", "comment"):
-        raise HTTPException(status_code=400, detail="source must be 'danmaku' or 'comment'")
+    if source not in ("danmaku", "comment", "all"):
+        raise HTTPException(status_code=400, detail="source must be 'danmaku', 'comment', or 'all'")
     await _get_query_or_404(db, query_id)
     sentiments = await _get_query_sentiments(db, query_id)
     all_details = _collect_details(sentiments)
-    words = compute_sentiment_word_cloud(all_details, source, limit)
+    words = compute_sentiment_word_cloud(all_details, None if source == "all" else source, limit)
     return [SentimentWordItem(**w) for w in words]
 
 
@@ -157,13 +157,13 @@ async def video_sentiment_wordcloud(
     limit: int = QueryParam(100),
     db: AsyncSession = Depends(get_db),
 ):
-    if source not in ("danmaku", "comment"):
-        raise HTTPException(status_code=400, detail="source must be 'danmaku' or 'comment'")
+    if source not in ("danmaku", "comment", "all"):
+        raise HTTPException(status_code=400, detail="source must be 'danmaku', 'comment', or 'all'")
     sentiment = await _get_video_sentiment(db, bvid)
     if not sentiment:
         raise HTTPException(status_code=404, detail="No sentiment data")
     details = _safe_json_loads(sentiment.details)
-    words = compute_sentiment_word_cloud(details, source, limit)
+    words = compute_sentiment_word_cloud(details, None if source == "all" else source, limit)
     return [SentimentWordItem(**w) for w in words]
 
 

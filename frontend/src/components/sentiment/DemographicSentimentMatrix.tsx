@@ -8,7 +8,7 @@ interface Props {
   onCellClick?: (dimension: string, category: string) => void;
 }
 
-const DIMENSION_ORDER = ["gender", "level", "vip", "location"];
+const DIMENSION_ORDER = ["gender", "vip", "level", "location"];
 const COLORS = { positive: "#22c55e", neutral: "#94a3b8", negative: "#ef4444" };
 
 export default function DemographicSentimentMatrix({ data, onCellClick }: Props) {

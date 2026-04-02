@@ -9,7 +9,7 @@ import type {
   SentimentContextResponse,
 } from "@/types";
 import { Button } from "@/components/ui/button";
-import SentimentDistributionChart from "./SentimentDistributionChart";
+import SentimentDistributionChart, { combineDistributions } from "./SentimentDistributionChart";
 import SentimentTrendChart from "./SentimentTrendChart";
 import SentimentWordCloud from "./SentimentWordCloud";
 import DemographicSentimentMatrix from "./DemographicSentimentMatrix";
@@ -24,6 +24,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<SentimentOverview | null>(null);
   const [trend, setTrend] = useState<SentimentTrendPoint[]>([]);
+  const [allWords, setAllWords] = useState<SentimentWordItem[]>([]);
   const [danmakuWords, setDanmakuWords] = useState<SentimentWordItem[]>([]);
   const [commentWords, setCommentWords] = useState<SentimentWordItem[]>([]);
   const [demographics, setDemographics] = useState<DemographicSentimentCell[]>([]);
@@ -69,12 +70,14 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
       if (isQuery) {
         fetches.push(
           api.getSentimentTrend(queryId!).then(setTrend).catch(() => {}),
+          api.getSentimentWordcloud(queryId!, "all").then(setAllWords).catch(() => {}),
           api.getSentimentWordcloud(queryId!, "danmaku").then(setDanmakuWords).catch(() => {}),
           api.getSentimentWordcloud(queryId!, "comment").then(setCommentWords).catch(() => {}),
           api.getSentimentDemographics(queryId!).then(setDemographics).catch(() => {}),
         );
       } else if (bvid) {
         fetches.push(
+          api.getVideoSentimentWordcloud(bvid, "all").then(setAllWords).catch(() => {}),
           api.getVideoSentimentWordcloud(bvid, "danmaku").then(setDanmakuWords).catch(() => {}),
           api.getVideoSentimentWordcloud(bvid, "comment").then(setCommentWords).catch(() => {}),
           api.getVideoSentimentDemographics(bvid).then(setDemographics).catch(() => {}),
@@ -100,6 +103,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   useEffect(() => {
     setOverview(null);
     setTrend([]);
+    setAllWords([]);
     setDanmakuWords([]);
     setCommentWords([]);
     setDemographics([]);
@@ -136,9 +140,10 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   }
 
   const handleWordClick = useCallback((word: string, source: string) => {
-    const params: Record<string, string> = { word, source };
+    const params: Record<string, string> = { word };
+    if (source !== "all") params.source = source;
     setContextTitle(word);
-    setContextSubtitle(t(`chart.wordcloud.source.${source}`));
+    setContextSubtitle(source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined);
     setContextHighlightWord(word);
     setContextFetcher(() => () =>
       isQuery
@@ -162,9 +167,10 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   }, [isQuery, queryId, bvid, t]);
 
   const handleSegmentClick = useCallback((label: string, source: string) => {
-    const params: Record<string, string> = { label, source };
+    const params: Record<string, string> = { label };
+    if (source !== "all") params.source = source;
     setContextTitle(t(`sentiment.${label}`));
-    setContextSubtitle(t(`chart.wordcloud.source.${source}`));
+    setContextSubtitle(source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined);
     setContextHighlightWord(undefined);
     setContextFetcher(() => () =>
       isQuery
@@ -228,11 +234,43 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <SentimentDistributionChart danmaku={overview.danmaku} comment={overview.comment} onSegmentClick={handleSegmentClick} />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+            <SentimentDistributionChart
+              dist={combineDistributions(overview.danmaku, overview.comment)}
+              label={t("chart.wordcloud.mode.all")}
+              source="all"
+              onSegmentClick={handleSegmentClick}
+            />
+            <SentimentDistributionChart
+              dist={overview.danmaku}
+              label={t("sentiment.danmakuLabel")}
+              source="danmaku"
+              onSegmentClick={handleSegmentClick}
+            />
+            <SentimentDistributionChart
+              dist={overview.comment}
+              label={t("sentiment.commentLabel")}
+              source="comment"
+              onSegmentClick={handleSegmentClick}
+            />
             <SentimentWordCloud
-              danmakuWords={danmakuWords}
-              commentWords={commentWords}
+              words={allWords}
+              label={t("chart.wordcloud.mode.all")}
+              source="all"
+              loading={false}
+              onWordClick={handleWordClick}
+            />
+            <SentimentWordCloud
+              words={danmakuWords}
+              label={t("sentiment.danmakuLabel")}
+              source="danmaku"
+              loading={false}
+              onWordClick={handleWordClick}
+            />
+            <SentimentWordCloud
+              words={commentWords}
+              label={t("sentiment.commentLabel")}
+              source="comment"
               loading={false}
               onWordClick={handleWordClick}
             />

@@ -100,12 +100,12 @@ def compute_sentiment_trend(video_sentiments: list) -> list[dict]:
     return result
 
 
-def compute_sentiment_word_cloud(details: list[dict], source: str, limit: int = 100) -> list[dict]:
+def compute_sentiment_word_cloud(details: list[dict], source: str | None = None, limit: int = 100) -> list[dict]:
     """Word frequency + average sentiment score per word.
 
     Uses jieba tokenization and STOP_WORDS, same as wordcloud_svc.
     """
-    items = [d for d in details if d.get("source") == source]
+    items = [d for d in details if source is None or d.get("source") == source]
     if not items:
         return []
 
