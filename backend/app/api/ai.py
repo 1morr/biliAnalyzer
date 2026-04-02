@@ -70,8 +70,14 @@ async def _get_conversation_detail(db: AsyncSession, conv_id: int):
             tool_results[m.tool_call_id] = m.content
 
     visible = []
+    first_user_skipped = False
     for m in all_msgs:
         if m.role == "user" and m.content:
+            # Hide the initial prompt for preset conversations (not free_chat)
+            if not first_user_skipped and conv.preset != "free_chat":
+                first_user_skipped = True
+                continue
+            first_user_skipped = True
             visible.append(MessageResponse(
                 id=m.id, role=m.role, content=m.content, created_at=m.created_at,
             ))
@@ -149,7 +155,6 @@ async def _create_conversation_stream(
         } if query_id is not None and query else None
     ))
     initial_msg = body.content if (preset == "free_chat" and body.content) else get_initial_message(preset)
-    user_provided = preset == "free_chat" and body.content
     await save_message(db, conv.id, "system", content=system_content)
     await save_message(db, conv.id, "user", content=initial_msg)
     await db.flush()
@@ -171,10 +176,6 @@ async def _create_conversation_stream(
         yield {"event": "message", "data": json.dumps({
             "type": "conversation_created", "conversation_id": conv.id,
         })}
-        if not user_provided:
-            yield {"event": "message", "data": json.dumps({
-                "type": "user_message", "content": initial_msg,
-            })}
         try:
             async for event in stream_agent_response(client, model, messages, tools, db, context, conv.id):
                 yield {"event": "message", "data": json.dumps(event)}

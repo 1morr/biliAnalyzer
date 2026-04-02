@@ -143,14 +143,6 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
             if (event.type === "conversation_created") {
               convId = event.conversation_id;
               setCurrentConvId(event.conversation_id);
-            } else if (event.type === "user_message") {
-              // Show the initial trigger message immediately
-              setMessages((prev) => [...prev, {
-                id: Date.now(),
-                role: "user",
-                content: event.content,
-                created_at: new Date().toISOString(),
-              }]);
             } else if (event.type === "content") {
               accumulated += event.content;
               setStreamingContent(accumulated);
