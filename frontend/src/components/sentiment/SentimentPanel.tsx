@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type {
@@ -180,6 +180,11 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     setContextOpen(true);
   }, [isQuery, queryId, bvid, t]);
 
+  const combinedDist = useMemo(
+    () => combineDistributions(overview?.danmaku ?? null, overview?.comment ?? null),
+    [overview?.danmaku, overview?.comment],
+  );
+
   // Not analyzed yet
   if (!overview || overview.status === null) {
     if (!isQuery) return null; // Video without data: hide panel
@@ -236,7 +241,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
         <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
             <SentimentDistributionChart
-              dist={combineDistributions(overview.danmaku, overview.comment)}
+              dist={combinedDist}
               label={t("chart.wordcloud.mode.all")}
               source="all"
               onSegmentClick={handleSegmentClick}
