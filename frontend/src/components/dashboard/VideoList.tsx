@@ -89,7 +89,8 @@ function VideoRow({ video, queryId }: VideoRowProps) {
           {t("video.viewsLabel")}: {formatNumber(video.stats.views)} ·{" "}
           {t("video.likesLabel")}: {formatNumber(video.stats.likes)} ·{" "}
           {t("video.coinsLabel")}: {formatNumber(video.stats.coins)} ·{" "}
-          {t("video.favsLabel")}: {formatNumber(video.stats.favorites)}
+          {t("video.favsLabel")}: {formatNumber(video.stats.favorites)} ·{" "}
+          {t("stats.danmaku")}: {formatNumber(video.stats.danmaku_count)}
         </p>
         <div className="flex flex-wrap items-center gap-1">
           {tags.map((tag) => (

@@ -256,18 +256,20 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
 
   // Delete conversation
   async function handleDelete(convId: number) {
+    // Optimistic update — remove from UI immediately
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    if (currentConvId === convId) {
+      goBack();
+    }
     try {
       if (bvid) {
         await api.deleteVideoAIConversation(bvid, convId);
       } else if (queryId) {
         await api.deleteAIConversation(queryId, convId);
       }
-      setConversations((prev) => prev.filter((c) => c.id !== convId));
-      if (currentConvId === convId) {
-        goBack();
-      }
     } catch {
-      // silently fail
+      // Re-fetch on failure to restore accurate state
+      loadConversations();
     }
   }
 
@@ -305,7 +307,7 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex flex-col w-[420px] sm:max-w-[420px] p-0"
+        className="flex flex-col w-[560px] sm:max-w-[560px] p-0"
         showCloseButton={false}
       >
         <SheetHeader className="border-b border-border px-4 py-3 shrink-0">
