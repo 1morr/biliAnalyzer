@@ -130,24 +130,56 @@ TOOL_GET_VIDEO_DETAIL = {
     },
 }
 
-# Scope mapping
-QUERY_TOOLS = [
+TOOL_LIST_QUERIES = {
+    "type": "function",
+    "function": {
+        "name": "list_queries",
+        "description": "List all query records in the database. Returns id, uid, user_name, date range, video_count, and aggregate stats for each query. Use this to discover available data for cross-query comparisons.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+}
+
+TOOL_EXECUTE_SQL = {
+    "type": "function",
+    "function": {
+        "name": "execute_sql",
+        "description": (
+            "Execute a read-only SQL SELECT query against the SQLite database. Returns up to 200 rows. "
+            "Use this for custom queries that the predefined tools cannot handle.\n\n"
+            "Tables:\n"
+            "- queries (id, uid, user_name, start_date, end_date, status, video_count, total_views, total_likes, total_coins, total_favorites, total_shares, total_danmaku, total_comments, sentiment_status, created_at)\n"
+            "- query_videos (id, query_id, bvid)\n"
+            "- videos (bvid, aid, cid, uid, title, description, cover_url, duration, published_at, tags, created_at, updated_at)\n"
+            "- video_stats (id, bvid, views, likes, coins, favorites, shares, danmaku_count, comment_count, fetched_at)\n"
+            "- video_content (id, bvid, danmakus, comments, subtitle, fetched_at)\n"
+            "- video_sentiment (id, bvid, analyzer, danmaku_avg_score, danmaku_positive_pct, danmaku_neutral_pct, danmaku_negative_pct, danmaku_count, comment_avg_score, comment_positive_pct, comment_neutral_pct, comment_negative_pct, comment_count, details, analyzed_at)\n\n"
+            "Note: danmakus and comments columns contain large JSON arrays. Avoid selecting them in full unless necessary — use COUNT or targeted queries instead."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "A SQL SELECT query to execute. Only SELECT is allowed.",
+                },
+            },
+            "required": ["sql"],
+        },
+    },
+}
+
+# All tools available to the AI agent
+ALL_TOOLS = [
     TOOL_GET_STATS_SUMMARY, TOOL_GET_VIEWS_TREND, TOOL_GET_INTERACTION_DATA,
-    TOOL_GET_TOP_VIDEOS, TOOL_GET_DEMOGRAPHICS_SUMMARY, TOOL_GET_WORD_FREQUENCIES,
-    TOOL_GET_SENTIMENT_OVERVIEW, TOOL_GET_VIDEO_DETAIL,
-]
-
-VIDEO_TOOLS = [
-    TOOL_GET_VIDEO_COMPARISON, TOOL_GET_DEMOGRAPHICS_SUMMARY,
+    TOOL_GET_TOP_VIDEOS, TOOL_GET_VIDEO_COMPARISON, TOOL_GET_DEMOGRAPHICS_SUMMARY,
     TOOL_GET_WORD_FREQUENCIES, TOOL_GET_SENTIMENT_OVERVIEW, TOOL_GET_VIDEO_DETAIL,
+    TOOL_LIST_QUERIES, TOOL_EXECUTE_SQL,
 ]
 
 
-def get_tools_for_scope(scope: str) -> list[dict]:
-    """Return tool definitions filtered by scope ('query' or 'video')."""
-    if scope == "video":
-        return VIDEO_TOOLS
-    return QUERY_TOOLS
+def get_tools() -> list[dict]:
+    """Return all tool definitions."""
+    return ALL_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +235,10 @@ async def execute_tool(
         elif name == "get_video_detail":
             target_bvid = arguments.get("bvid") or bvid
             return await _exec_video_detail(db, target_bvid)
+        elif name == "list_queries":
+            return await _exec_list_queries(db)
+        elif name == "execute_sql":
+            return await _exec_sql_query(db, arguments)
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})
     except Exception as e:
@@ -459,3 +495,51 @@ async def _exec_video_detail(db: AsyncSession, bvid: str | None) -> str:
             "danmaku_count": stats.danmaku_count, "comment_count": stats.comment_count,
         })
     return json.dumps(data, ensure_ascii=False)
+
+
+async def _exec_list_queries(db: AsyncSession) -> str:
+    result = await db.execute(
+        select(Query).where(Query.status == "done").order_by(Query.created_at.desc())
+    )
+    queries = result.scalars().all()
+    data = []
+    for q in queries:
+        data.append({
+            "id": q.id, "uid": q.uid, "user_name": q.user_name,
+            "start_date": q.start_date.isoformat() if q.start_date else None,
+            "end_date": q.end_date.isoformat() if q.end_date else None,
+            "video_count": q.video_count,
+            "total_views": q.total_views, "total_likes": q.total_likes,
+            "total_coins": q.total_coins, "total_favorites": q.total_favorites,
+            "total_shares": q.total_shares, "total_danmaku": q.total_danmaku,
+            "total_comments": q.total_comments,
+            "created_at": q.created_at.isoformat() if q.created_at else None,
+        })
+    return json.dumps(data, ensure_ascii=False)
+
+
+async def _exec_sql_query(db: AsyncSession, args: dict) -> str:
+    sql = (args.get("sql") or "").strip()
+    if not sql:
+        return json.dumps({"error": "No SQL query provided"})
+
+    # Safety: only allow SELECT statements
+    upper = sql.upper().lstrip()
+    if not upper.startswith("SELECT"):
+        return json.dumps({"error": "Only SELECT queries are allowed"})
+
+    # Block dangerous patterns
+    for keyword in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "ATTACH", "DETACH"):
+        if keyword in upper:
+            return json.dumps({"error": f"Forbidden keyword: {keyword}"})
+
+    from sqlalchemy import text
+
+    try:
+        result = await db.execute(text(sql))
+        columns = list(result.keys())
+        rows = result.fetchmany(200)
+        data = [dict(zip(columns, row)) for row in rows]
+        return json.dumps(data, ensure_ascii=False, default=str)
+    except Exception as e:
+        return json.dumps({"error": f"SQL error: {str(e)}"})

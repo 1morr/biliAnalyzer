@@ -58,7 +58,7 @@ export default function VideoHeader({ video }: VideoHeaderProps) {
               {t("video.publishedAt")}: {new Date(video.published_at).toLocaleDateString()}
             </span>
           )}
-          <span>BV: {video.bvid}</span>
+          <span>{video.bvid}</span>
         </div>
 
         {tags.length > 0 && (

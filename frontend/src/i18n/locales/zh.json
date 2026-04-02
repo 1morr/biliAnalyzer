@@ -41,7 +41,9 @@
       "topicInspiration": "选题灵感",
       "topicInspirationDesc": "基于数据模式的内容选题推荐",
       "videoAnalysis": "视频分析",
-      "videoAnalysisDesc": "单个视频的深度表现分析"
+      "videoAnalysisDesc": "单个视频的深度表现分析",
+      "freeChat": "自由对话",
+      "freeChatDesc": "随意提问"
     },
     "toolQuerying": "正在查询数据",
     "sendMessage": "发送",

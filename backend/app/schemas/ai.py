@@ -3,18 +3,25 @@ from datetime import datetime
 
 
 class CreateConversationRequest(BaseModel):
-    preset: str  # "overall_analysis" | "topic_inspiration" | "video_analysis"
+    preset: str  # "overall_analysis" | "topic_inspiration" | "video_analysis" | "free_chat"
+    content: str | None = None  # user-provided first message (required for free_chat)
 
 
 class SendMessageRequest(BaseModel):
     content: str
 
 
+class ToolCallInfo(BaseModel):
+    name: str
+    arguments: dict = {}
+    result: str | None = None
+
+
 class MessageResponse(BaseModel):
     id: int
     role: str  # "user" | "assistant"
     content: str | None
-    tool_calls: list[str] | None = None  # function names called by this assistant message
+    tool_calls: list[ToolCallInfo] | None = None
     created_at: datetime
 
     class Config:

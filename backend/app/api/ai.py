@@ -10,13 +10,13 @@ from app.models import Query, Video
 from app.models.conversation import AIConversation, AIMessage
 from app.schemas.ai import (
     CreateConversationRequest, SendMessageRequest,
-    ConversationSummary, ConversationDetail, MessageResponse,
+    ConversationSummary, ConversationDetail, MessageResponse, ToolCallInfo,
 )
 from app.services.ai_prompts import get_system_prompt, get_initial_message
 from app.services.ai_service import (
     get_openai_client, build_messages_from_db, save_message, stream_agent_response,
 )
-from app.services.ai_tools import get_tools_for_scope
+from app.services.ai_tools import get_tools
 
 router = APIRouter()
 
@@ -63,7 +63,12 @@ async def _get_conversation_detail(db: AsyncSession, conv_id: int):
     all_msgs = result.scalars().all()
 
     # Filter to user/assistant messages with content for display
-    # For assistant messages, extract tool function names from tool_calls JSON
+    # Build tool_call_id → result map from tool messages
+    tool_results: dict[str, str] = {}
+    for m in all_msgs:
+        if m.role == "tool" and m.tool_call_id and m.content:
+            tool_results[m.tool_call_id] = m.content
+
     visible = []
     for m in all_msgs:
         if m.role == "user" and m.content:
@@ -71,18 +76,31 @@ async def _get_conversation_detail(db: AsyncSession, conv_id: int):
                 id=m.id, role=m.role, content=m.content, created_at=m.created_at,
             ))
         elif m.role == "assistant" and (m.content or m.tool_calls):
-            tool_names = None
+            tool_infos = None
             if m.tool_calls:
                 try:
                     tc_list = json.loads(m.tool_calls)
-                    tool_names = [tc["function"]["name"] for tc in tc_list if tc.get("function", {}).get("name")]
+                    tool_infos = []
+                    for tc in tc_list:
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            args = {}
+                            if fn.get("arguments"):
+                                try:
+                                    args = json.loads(fn["arguments"])
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                            tool_infos.append(ToolCallInfo(
+                                name=fn["name"], arguments=args,
+                                result=tool_results.get(tc.get("id")),
+                            ))
                 except (json.JSONDecodeError, KeyError, TypeError):
                     pass
             # Only include if there's actual content or tool_calls to show
-            if m.content or tool_names:
+            if m.content or tool_infos:
                 visible.append(MessageResponse(
                     id=m.id, role=m.role, content=m.content,
-                    tool_calls=tool_names, created_at=m.created_at,
+                    tool_calls=tool_infos, created_at=m.created_at,
                 ))
 
     return ConversationDetail(
@@ -108,9 +126,8 @@ async def _create_conversation_stream(
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
 
-    # Determine scope and title
-    scope = "video" if (bvid and preset == "video_analysis") else "query"
-    title_prefix = {"overall_analysis": "Overall", "topic_inspiration": "Topics", "video_analysis": "Video"}
+    # Determine title
+    title_prefix = {"overall_analysis": "Overall", "topic_inspiration": "Topics", "video_analysis": "Video", "free_chat": "Chat"}
     title = f"{title_prefix.get(preset, 'AI')} - {datetime.utcnow().strftime('%m/%d %H:%M')}"
 
     # Create conversation
@@ -122,8 +139,9 @@ async def _create_conversation_stream(
     await db.flush()
 
     # Save system + initial user messages
-    system_content = get_system_prompt(preset, lang)
-    initial_msg = get_initial_message(preset)
+    system_content = get_system_prompt(lang, query_id=query_id, bvid=bvid)
+    initial_msg = body.content if (preset == "free_chat" and body.content) else get_initial_message(preset)
+    user_provided = preset == "free_chat" and body.content
     await save_message(db, conv.id, "system", content=system_content)
     await save_message(db, conv.id, "user", content=initial_msg)
     await db.flush()
@@ -133,7 +151,7 @@ async def _create_conversation_stream(
         {"role": "system", "content": system_content},
         {"role": "user", "content": initial_msg},
     ]
-    tools = get_tools_for_scope(scope)
+    tools = get_tools()
     context = {"query_id": query_id, "bvid": bvid}
 
     try:
@@ -145,9 +163,10 @@ async def _create_conversation_stream(
         yield {"event": "message", "data": json.dumps({
             "type": "conversation_created", "conversation_id": conv.id,
         })}
-        yield {"event": "message", "data": json.dumps({
-            "type": "user_message", "content": initial_msg,
-        })}
+        if not user_provided:
+            yield {"event": "message", "data": json.dumps({
+                "type": "user_message", "content": initial_msg,
+            })}
         try:
             async for event in stream_agent_response(client, model, messages, tools, db, context, conv.id):
                 yield {"event": "message", "data": json.dumps(event)}
@@ -180,8 +199,7 @@ async def _send_message_stream(
     all_msgs = result.scalars().all()
     messages = build_messages_from_db(all_msgs)
 
-    scope = "video" if (conv.bvid and conv.preset == "video_analysis") else "query"
-    tools = get_tools_for_scope(scope)
+    tools = get_tools()
     context = {"query_id": conv.query_id, "bvid": conv.bvid}
 
     try:

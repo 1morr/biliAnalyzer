@@ -41,7 +41,9 @@
       "topicInspiration": "Topic Inspiration",
       "topicInspirationDesc": "Content topic recommendations based on data patterns",
       "videoAnalysis": "Video Analysis",
-      "videoAnalysisDesc": "Deep analysis of a specific video's performance"
+      "videoAnalysisDesc": "Deep analysis of a specific video's performance",
+      "freeChat": "Free Chat",
+      "freeChatDesc": "Ask any question"
     },
     "toolQuerying": "Querying data",
     "sendMessage": "Send",

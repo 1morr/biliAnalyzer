@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
-import { BarChart3Icon, LightbulbIcon, VideoIcon, MessageSquareIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, LightbulbIcon, VideoIcon, MessageSquareIcon, MessageCircleIcon, Trash2Icon } from "lucide-react";
 import type { AIPreset, AIConversation } from "@/types";
 
 const PRESET_ICONS: Record<string, typeof BarChart3Icon> = {
   overall_analysis: BarChart3Icon,
   topic_inspiration: LightbulbIcon,
   video_analysis: VideoIcon,
+  free_chat: MessageCircleIcon,
 };
 
 interface AIPresetSelectorProps {

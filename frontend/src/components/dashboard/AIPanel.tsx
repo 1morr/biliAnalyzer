@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { AIPreset, AIConversation, AIMessageItem } from "@/types";
+import type { AIPreset, AIConversation, AIMessageItem, ToolCallInfo } from "@/types";
 import AIPresetSelector from "@/components/ai/AIPresetSelector";
 import AIConversationView from "@/components/ai/AIConversationView";
 import AIMessageInput from "@/components/ai/AIMessageInput";
@@ -27,6 +27,7 @@ type PanelState = "presets" | "streaming" | "chat" | "error";
 const QUERY_PRESETS: AIPreset[] = [
   { id: "overall_analysis", labelKey: "ai.presets.overallAnalysis", descriptionKey: "ai.presets.overallAnalysisDesc", icon: "chart" },
   { id: "topic_inspiration", labelKey: "ai.presets.topicInspiration", descriptionKey: "ai.presets.topicInspirationDesc", icon: "lightbulb" },
+  { id: "free_chat", labelKey: "ai.presets.freeChat", descriptionKey: "ai.presets.freeChatDesc", icon: "message" },
 ];
 
 const VIDEO_PRESETS: AIPreset[] = [
@@ -40,8 +41,8 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
   const [currentConvId, setCurrentConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AIMessageItem[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
-  const [activeTools, setActiveTools] = useState<string[]>([]);
-  const [usedTools, setUsedTools] = useState<string[]>([]);
+  const [activeTools, setActiveTools] = useState<ToolCallInfo[]>([]);
+  const [usedTools, setUsedTools] = useState<ToolCallInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -155,10 +156,20 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
               setStreamingContent(accumulated);
               setActiveTools([]);
             } else if (event.type === "tool_start") {
-              setActiveTools((prev) => [...prev, event.name]);
-              setUsedTools((prev) => [...prev, event.name]);
+              const info: ToolCallInfo = { name: event.name, arguments: event.arguments || {} };
+              setActiveTools((prev) => [...prev, info]);
+              setUsedTools((prev) => [...prev, info]);
             } else if (event.type === "tool_end") {
-              // Tool finished — keep it in activeTools until content arrives
+              // Attach result to the matching tool entry
+              setUsedTools((prev) => {
+                const idx = prev.findLastIndex((t) => t.name === event.name && !t.result);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], result: event.result };
+                  return updated;
+                }
+                return prev;
+              });
             } else if (event.type === "done") {
               // handled after loop
             } else if (event.type === "error") {
@@ -206,6 +217,14 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
 
   // Create new conversation
   async function handlePresetSelect(presetId: string) {
+    if (presetId === "free_chat") {
+      // Go to chat state with input — user types first message
+      setState("chat");
+      setMessages([]);
+      setCurrentConvId(null);
+      return;
+    }
+
     const url = bvid
       ? api.createVideoAIConversationUrl(bvid)
       : queryId ? api.createAIConversationUrl(queryId) : null;
@@ -252,10 +271,8 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
     }
   }
 
-  // Send follow-up message
+  // Send follow-up message (or first message for free_chat)
   async function handleSendMessage(content: string) {
-    if (!currentConvId) return;
-
     // Add user message to display immediately
     const tempMsg: AIMessageItem = {
       id: Date.now(),
@@ -264,6 +281,17 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempMsg]);
+
+    if (!currentConvId) {
+      // First message in free_chat — create conversation with content
+      const url = bvid
+        ? api.createVideoAIConversationUrl(bvid)
+        : queryId ? api.createAIConversationUrl(queryId) : null;
+      if (!url) return;
+
+      await readSSEStream(url, { preset: "free_chat", content });
+      return;
+    }
 
     const url = bvid
       ? api.sendVideoAIMessageUrl(bvid, currentConvId)

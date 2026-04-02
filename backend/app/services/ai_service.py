@@ -145,7 +145,7 @@ async def stream_agent_response(
                 except json.JSONDecodeError:
                     fn_args = {}
 
-                yield {"type": "tool_start", "name": fn_name}
+                yield {"type": "tool_start", "name": fn_name, "arguments": fn_args}
 
                 result_str = await execute_tool(fn_name, fn_args, db, context)
 
@@ -160,7 +160,7 @@ async def stream_agent_response(
                     "tool_call_id": tc["id"], "name": fn_name,
                 })
 
-                yield {"type": "tool_end", "name": fn_name}
+                yield {"type": "tool_end", "name": fn_name, "result": result_str}
 
             # Continue loop — AI will process tool results
             continue

@@ -1,49 +1,30 @@
-"""System prompts and initial trigger messages for AI presets."""
+"""System prompt and initial trigger messages for AI presets."""
 
-OVERALL_ANALYSIS_SYSTEM = """You are a professional Bilibili channel performance analyst. Your job is to analyze a creator's video data and provide actionable insights.
+SYSTEM_PROMPT = """You are a professional Bilibili data analyst assistant. You can analyze channel performance, suggest content topics, evaluate individual videos, and answer any data-related question.
 
-You have access to tools that query the database directly. Use them to gather data before drawing conclusions. Always call multiple tools to get a comprehensive picture.
+You have access to tools that query the database directly. Use them to gather data before drawing conclusions. Always call relevant tools to support your analysis with real data.
 
-Analysis guidelines:
-- Identify top-performing content and common traits
-- Analyze title strategy, tag strategy, publishing patterns
-- Evaluate audience engagement metrics
-- Compare performance across different content types
-- Provide specific, data-backed recommendations
+{context}
 
-{language}"""
+You also have access to:
+- list_queries: discover all query records for cross-query comparisons
+- execute_sql: run arbitrary SELECT queries against the SQLite database when predefined tools are insufficient
 
-TOPIC_INSPIRATION_SYSTEM = """You are a Bilibili content strategy advisor specializing in topic ideation. Your job is to analyze existing content data and suggest new video topics.
+Database schema for execute_sql:
+- queries (id, uid, user_name, start_date, end_date, status, video_count, total_views, total_likes, total_coins, total_favorites, total_shares, total_danmaku, total_comments, sentiment_status, created_at)
+- query_videos (id, query_id FK→queries.id, bvid FK→videos.bvid)
+- videos (bvid PK, aid, cid, uid, title, description, cover_url, duration, published_at, tags, created_at, updated_at)
+- video_stats (id, bvid FK→videos.bvid, views, likes, coins, favorites, shares, danmaku_count, comment_count, fetched_at)
+- video_content (id, bvid FK→videos.bvid UNIQUE, danmakus JSON, comments JSON, subtitle TEXT, fetched_at)
+- video_sentiment (id, bvid FK→videos.bvid, analyzer, danmaku_avg_score, danmaku_positive_pct, danmaku_neutral_pct, danmaku_negative_pct, danmaku_count, comment_avg_score, comment_positive_pct, comment_neutral_pct, comment_negative_pct, comment_count, details JSON, analyzed_at)
 
-You have access to tools that query the database directly. Use them to understand what works and what gaps exist.
-
-Analysis guidelines:
-- Identify high-performing content themes and patterns
-- Find underexplored topic areas with potential
-- Suggest specific video ideas with title examples
-- Consider audience demographics and preferences
-- Recommend content formats that resonate with the audience
-
-{language}"""
-
-VIDEO_ANALYSIS_SYSTEM = """You are a professional Bilibili video analyst. Your job is to provide deep analysis of a specific video's performance.
-
-You have access to tools that query the database directly. Use them to gather video stats, compare with averages, and analyze audience sentiment.
-
-Analysis guidelines:
-- Evaluate the video's performance relative to the channel average
-- Analyze audience engagement patterns
-- Assess sentiment from comments and danmaku
-- Identify what made this video succeed or underperform
-- Provide specific improvement suggestions
+Guidelines:
+- Predefined tools automatically use the current context — prefer them for standard analytics
+- Use execute_sql for custom queries, cross-query comparisons, or anything predefined tools can't cover
+- Always explain findings clearly with data to support conclusions
+- Provide specific, actionable recommendations when appropriate
 
 {language}"""
-
-SYSTEM_PROMPTS = {
-    "overall_analysis": OVERALL_ANALYSIS_SYSTEM,
-    "topic_inspiration": TOPIC_INSPIRATION_SYSTEM,
-    "video_analysis": VIDEO_ANALYSIS_SYSTEM,
-}
 
 INITIAL_MESSAGES = {
     "overall_analysis": "Analyze this channel's overall performance. Look at stats, trends, top videos, and audience data to give me a comprehensive analysis with actionable recommendations.",
@@ -57,10 +38,19 @@ LANGUAGE_INSTRUCTIONS = {
 }
 
 
-def get_system_prompt(preset: str, lang: str = "zh") -> str:
-    template = SYSTEM_PROMPTS.get(preset, OVERALL_ANALYSIS_SYSTEM)
+def get_system_prompt(lang: str = "zh", query_id: int | None = None, bvid: str | None = None) -> str:
     language = LANGUAGE_INSTRUCTIONS.get(lang, LANGUAGE_INSTRUCTIONS["en"])
-    return template.format(language=language)
+
+    parts = ["Current context:"]
+    if query_id is not None:
+        parts.append(f"- query_id = {query_id} (predefined tools and execute_sql should use this to filter data)")
+    if bvid is not None:
+        parts.append(f"- bvid = \"{bvid}\" (the current video being analyzed)")
+    if len(parts) == 1:
+        parts.append("- No specific query or video context")
+    context = "\n".join(parts)
+
+    return SYSTEM_PROMPT.format(language=language, context=context)
 
 
 def get_initial_message(preset: str) -> str:

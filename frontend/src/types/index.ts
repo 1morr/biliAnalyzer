@@ -193,11 +193,17 @@ export interface AIConversation {
   message_count: number;
 }
 
+export interface ToolCallInfo {
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string | null;
+}
+
 export interface AIMessageItem {
   id: number;
   role: "user" | "assistant";
   content: string | null;
-  tool_calls?: string[] | null;  // function names called by this assistant message
+  tool_calls?: ToolCallInfo[] | null;
   created_at: string;
 }
 
