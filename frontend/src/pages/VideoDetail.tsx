@@ -10,6 +10,7 @@ import RadarChart from "@/components/video/RadarChart";
 import ComparisonBars from "@/components/video/ComparisonBars";
 import VideoWordClouds from "@/components/video/VideoWordClouds";
 import UserDemographicsPanel from "@/components/shared/UserDemographicsPanel";
+import SentimentPanel from "@/components/sentiment/SentimentPanel";
 
 export default function VideoDetailPage() {
   const { t } = useTranslation();
@@ -118,6 +119,11 @@ export default function VideoDetailPage() {
       {/* Word clouds */}
       <div className="rounded-xl border border-border bg-card p-4">
         <VideoWordClouds bvid={video.bvid} hasSubtitle={video.has_subtitle} filter={demoFilter} />
+      </div>
+
+      {/* Sentiment analysis — at bottom */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <SentimentPanel bvid={video.bvid} />
       </div>
     </div>
   );

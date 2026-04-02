@@ -38,7 +38,16 @@ async def _ensure_video_content_uniqueness(conn: AsyncSession):
     ))
 
 
+async def _ensure_sentiment_status_column(conn: AsyncSession):
+    """Add sentiment_status column to queries table if missing."""
+    cols = await conn.execute(text("PRAGMA table_info('queries')"))
+    col_names = {row[1] for row in cols.fetchall()}
+    if "sentiment_status" not in col_names:
+        await conn.execute(text("ALTER TABLE queries ADD COLUMN sentiment_status TEXT"))
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _ensure_video_content_uniqueness(conn)
+        await _ensure_sentiment_status_column(conn)

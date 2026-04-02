@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 from app.models import User, Video, VideoStats, VideoContent, Query, QueryVideo
 from app.services.bilibili import BilibiliClient
+from app.services.sentiment_task import run_sentiment_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,9 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
             query.status = "done"
             query.progress = None
             await db.commit()
+
+            # Kick off sentiment analysis in background
+            asyncio.create_task(run_sentiment_analysis(query_id))
 
         except Exception as e:
             logger.exception("Fetch task failed for query %s: %s", query_id, e)

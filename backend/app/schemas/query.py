@@ -34,3 +34,4 @@ class QueryDetail(QuerySummary):
     total_shares: int
     total_danmaku: int
     total_comments: int
+    sentiment_status: str | None = None

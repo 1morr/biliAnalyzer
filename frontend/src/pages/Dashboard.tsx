@@ -15,6 +15,7 @@ import DurationChart from "@/components/dashboard/DurationChart";
 import VideoList from "@/components/dashboard/VideoList";
 import AIPanel from "@/components/dashboard/AIPanel";
 import UserDemographicsPanel from "@/components/shared/UserDemographicsPanel";
+import SentimentPanel from "@/components/sentiment/SentimentPanel";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -211,6 +212,13 @@ export default function Dashboard() {
             <div className="rounded-xl border border-border bg-card p-4">
               <WordCloudGrid queryId={queryId} filter={demoFilter} />
             </div>
+          </div>
+        )}
+
+        {/* Sentiment analysis — at bottom */}
+        {queryId && detail?.status === "done" && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <SentimentPanel queryId={queryId} />
           </div>
         )}
 

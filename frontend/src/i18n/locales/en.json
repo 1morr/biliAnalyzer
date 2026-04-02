@@ -68,5 +68,34 @@
     "clearFilter": "Clear Filters",
     "applyFilter": "Apply Filter",
     "filtered": "{{count}} users (filtered)"
+  },
+  "sentiment": {
+    "title": "Sentiment Analysis",
+    "distribution": "Sentiment Distribution",
+    "trend": "Sentiment Trend",
+    "wordcloud": "Sentiment Word Cloud",
+    "demographics": "Demographic Sentiment",
+    "positive": "Positive",
+    "neutral": "Neutral",
+    "negative": "Negative",
+    "danmakuSentiment": "Danmaku Sentiment",
+    "commentSentiment": "Comment Sentiment",
+    "danmakuLabel": "Danmaku",
+    "commentLabel": "Comments",
+    "avgScore": "Avg Score",
+    "frequency": "Frequency",
+    "label": "Sentiment",
+    "notAnalyzed": "Sentiment analysis not yet performed",
+    "runAnalysis": "Run Analysis",
+    "analyzing": "Analyzing sentiment...",
+    "error": "Sentiment analysis failed",
+    "retry": "Retry",
+    "reanalyze": "Re-analyze",
+    "dim": {
+      "gender": "Gender",
+      "level": "Level",
+      "vip": "VIP",
+      "location": "Location"
+    }
   }
 }

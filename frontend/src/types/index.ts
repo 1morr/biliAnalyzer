@@ -9,6 +9,7 @@ export interface QueryDetail extends QuerySummary {
   error_message: string | null;
   total_likes: number; total_coins: number; total_favorites: number;
   total_shares: number; total_danmaku: number; total_comments: number;
+  sentiment_status: string | null;
 }
 
 export interface VideoStats {
@@ -117,4 +118,45 @@ export interface WordDetailResponse {
   word: string;
   total_count: number;
   videos: WordContextVideo[];
+}
+
+// Sentiment Analysis Types
+
+export interface SentimentDistribution {
+  avg_score: number;
+  positive_pct: number;
+  neutral_pct: number;
+  negative_pct: number;
+  count: number;
+}
+
+export interface SentimentOverview {
+  status: string | null;
+  danmaku: SentimentDistribution | null;
+  comment: SentimentDistribution | null;
+}
+
+export interface SentimentTrendPoint {
+  date: string;
+  danmaku_avg: number | null;
+  comment_avg: number | null;
+  danmaku_positive_pct: number | null;
+  comment_positive_pct: number | null;
+}
+
+export interface SentimentWordItem {
+  name: string;
+  value: number;
+  avg_score: number;
+  label: string;
+}
+
+export interface DemographicSentimentCell {
+  dimension: string;
+  category: string;
+  avg_score: number;
+  positive_pct: number;
+  neutral_pct: number;
+  negative_pct: number;
+  count: number;
 }

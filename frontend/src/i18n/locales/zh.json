@@ -68,5 +68,34 @@
     "clearFilter": "清除筛选",
     "applyFilter": "确认筛选",
     "filtered": "{{count}} 位用户（已筛选）"
+  },
+  "sentiment": {
+    "title": "情感分析",
+    "distribution": "情感分布",
+    "trend": "情感趋势",
+    "wordcloud": "情感词云",
+    "demographics": "人群情感分析",
+    "positive": "正面",
+    "neutral": "中性",
+    "negative": "负面",
+    "danmakuSentiment": "弹幕情感",
+    "commentSentiment": "评论情感",
+    "danmakuLabel": "弹幕",
+    "commentLabel": "评论",
+    "avgScore": "平均分",
+    "frequency": "频次",
+    "label": "情感",
+    "notAnalyzed": "尚未进行情感分析",
+    "runAnalysis": "运行分析",
+    "analyzing": "情感分析中...",
+    "error": "情感分析失败",
+    "retry": "重试",
+    "reanalyze": "重新分析",
+    "dim": {
+      "gender": "性别",
+      "level": "等级",
+      "vip": "大会员",
+      "location": "地区"
+    }
   }
 }

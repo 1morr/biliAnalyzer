@@ -1,4 +1,4 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter, SentimentOverview, SentimentTrendPoint, SentimentWordItem, DemographicSentimentCell } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -66,4 +66,24 @@ export const api = {
   getVideoWordDetail: (bvid: string, type: string, word: string, filter?: DemographicsFilter) =>
     request<WordDetailResponse>(`/videos/${bvid}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}${buildFilterParams(filter, "&")}`),
   aiAnalyzeUrl: (queryId: number) => `${BASE}/queries/${queryId}/ai/analyze`,
+
+  // Sentiment analysis
+  getSentimentOverview: (queryId: number) =>
+    request<SentimentOverview>(`/queries/${queryId}/sentiment/overview`),
+  getSentimentTrend: (queryId: number) =>
+    request<SentimentTrendPoint[]>(`/queries/${queryId}/sentiment/trend`),
+  getSentimentWordcloud: (queryId: number, source: string, limit = 100) =>
+    request<SentimentWordItem[]>(`/queries/${queryId}/sentiment/wordcloud/${source}?limit=${limit}`),
+  getSentimentDemographics: (queryId: number) =>
+    request<DemographicSentimentCell[]>(`/queries/${queryId}/sentiment/demographics`),
+  triggerSentimentAnalysis: (queryId: number, force = false) =>
+    request<{ status: string; message: string }>(`/queries/${queryId}/sentiment/analyze?force=${force}`, { method: "POST" }),
+
+  // Video-level sentiment
+  getVideoSentimentOverview: (bvid: string) =>
+    request<SentimentOverview>(`/videos/${bvid}/sentiment/overview`),
+  getVideoSentimentWordcloud: (bvid: string, source: string, limit = 100) =>
+    request<SentimentWordItem[]>(`/videos/${bvid}/sentiment/wordcloud/${source}?limit=${limit}`),
+  getVideoSentimentDemographics: (bvid: string) =>
+    request<DemographicSentimentCell[]>(`/videos/${bvid}/sentiment/demographics`),
 };
