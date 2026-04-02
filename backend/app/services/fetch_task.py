@@ -48,13 +48,13 @@ async def _upsert_video_content(
     ))
 
 
-async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str | None):
+async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str | None, proxy_urls: list[str] | None = None):
     """Background task: fetch all video data for a query."""
     async with async_session() as db:
         query = await db.get(Query, query_id)
         if not query:
             return
-        client = BilibiliClient(sessdata=sessdata)
+        client = BilibiliClient(sessdata=sessdata, proxy_urls=proxy_urls)
         try:
             # Step 1: Fetch user info
             query.status = "fetching"

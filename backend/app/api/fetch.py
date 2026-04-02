@@ -26,5 +26,11 @@ async def create_fetch(req: FetchRequest, db: AsyncSession = Depends(get_db)):
         except Exception:
             pass
 
-    asyncio.create_task(run_fetch(query.id, req.uid, req.start_date, req.end_date, sessdata))
+    # Get proxy list if configured
+    proxy_list_row = await db.get(AppSettings, "proxy_list")
+    proxy_urls: list[str] = []
+    if proxy_list_row and proxy_list_row.value:
+        proxy_urls = [u.strip() for u in proxy_list_row.value.splitlines() if u.strip()]
+
+    asyncio.create_task(run_fetch(query.id, req.uid, req.start_date, req.end_date, sessdata, proxy_urls=proxy_urls))
     return FetchResponse(query_id=query.id, status="pending")

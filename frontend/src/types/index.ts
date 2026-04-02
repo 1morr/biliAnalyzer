@@ -90,6 +90,7 @@ export function isFilterEmpty(f: DemographicsFilter): boolean {
 export interface SettingsResponse {
   sessdata: string; ai_base_url: string;
   ai_api_key: string; ai_model: string;
+  proxy_list: string;
 }
 
 export interface WordFrequencyItem {

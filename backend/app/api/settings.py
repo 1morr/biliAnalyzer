@@ -17,6 +17,7 @@ DEFAULTS = {
     "ai_base_url": "https://api.openai.com/v1",
     "ai_api_key": "",
     "ai_model": "gpt-4o",
+    "proxy_list": "",
 }
 
 
@@ -61,6 +62,7 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         ai_base_url=await _get_setting(db, "ai_base_url"),
         ai_api_key=await _get_setting(db, "ai_api_key"),
         ai_model=await _get_setting(db, "ai_model"),
+        proxy_list=await _get_setting(db, "proxy_list"),
     )
 
 
@@ -74,6 +76,8 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
         await _set_setting(db, "ai_api_key", data.ai_api_key)
     if data.ai_model is not None:
         await _set_setting(db, "ai_model", data.ai_model)
+    if data.proxy_list is not None:
+        await _set_setting(db, "proxy_list", data.proxy_list)
     await db.commit()
     return await get_settings(db)
 

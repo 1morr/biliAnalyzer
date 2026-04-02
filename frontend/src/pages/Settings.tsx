@@ -76,6 +76,7 @@ export default function Settings() {
   const [aiBaseUrl, setAiBaseUrl] = useState("https://api.openai.com/v1");
   const [aiApiKey, setAiApiKey] = useState(MASK);
   const [aiModel, setAiModel] = useState("gpt-4o");
+  const [proxyList, setProxyList] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -99,6 +100,7 @@ export default function Settings() {
         setAiBaseUrl(s.ai_base_url || "https://api.openai.com/v1");
         setAiApiKey(s.ai_api_key ? MASK : "");
         setAiModel(s.ai_model || "gpt-4o");
+        setProxyList(s.proxy_list || "");
       })
       .catch(() => {
         // keep defaults
@@ -121,6 +123,7 @@ export default function Settings() {
       const payload: Record<string, string> = {
         ai_base_url: aiBaseUrl,
         ai_model: aiModel,
+        proxy_list: proxyList,
       };
       // Only send if user changed from mask
       if (sessdata !== MASK) payload.sessdata = sessdata;
@@ -234,6 +237,25 @@ export default function Settings() {
                 {sessdataTestMessage}
               </span>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Section 1.5: Proxy Configuration ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings.proxy")}</CardTitle>
+          <CardDescription>{t("settings.proxyHelp")}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <textarea
+              value={proxyList}
+              onChange={(e) => setProxyList(e.target.value)}
+              placeholder={t("settings.proxyPlaceholder")}
+              rows={4}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono resize-y"
+            />
           </div>
         </CardContent>
       </Card>

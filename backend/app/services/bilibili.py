@@ -12,6 +12,8 @@ from xml.etree import ElementTree
 
 import httpx
 
+from app.services.proxy_pool import ProxyPool
+
 logger = logging.getLogger(__name__)
 
 # Standard WBI mixin key permutation table
@@ -40,7 +42,7 @@ class BilibiliClient:
     BASE = "https://api.bilibili.com"
     _WBI_KEY_TTL = 600  # refresh WBI keys every 10 minutes
 
-    def __init__(self, sessdata: str | None = None):
+    def __init__(self, sessdata: str | None = None, proxy_urls: list[str] | None = None):
         self._sessdata = sessdata
         self._img_key: str | None = None
         self._sub_key: str | None = None
@@ -50,6 +52,8 @@ class BilibiliClient:
         self._last_request_time: float = 0
         self._rate_limit_count: int = 0  # track -799 occurrences
         self._base_delay: float = 1.5  # base delay between requests
+        self._proxy_urls = proxy_urls or []
+        self._proxy_pool: ProxyPool | None = None
         cookies = {
             "buvid3": f"{uuid.uuid4()}infoc",
             "b_nut": str(int(time.time())),
@@ -64,6 +68,16 @@ class BilibiliClient:
         client = getattr(self, "_client", None)
         if client is not None:
             await client.aclose()
+        if self._proxy_pool:
+            await self._proxy_pool.aclose()
+
+    async def _ensure_proxy_pool(self) -> ProxyPool | None:
+        if not self._proxy_urls:
+            return None
+        if self._proxy_pool is None:
+            self._proxy_pool = ProxyPool(self._proxy_urls)
+            await self._proxy_pool.initialize()
+        return self._proxy_pool
 
     def _get_mixin_key(self, orig: str) -> str:
         return "".join(orig[i] for i in MIXIN_KEY_ENC_TAB)[:32]
@@ -110,31 +124,64 @@ class BilibiliClient:
         sanitized["w_rid"] = w_rid
         return sanitized
 
-    async def _throttle(self):
-        """Ensure random delay between requests with dynamic adjustment."""
+    async def _throttle(self, via_proxy: bool = False):
+        """Ensure random delay between requests with dynamic adjustment.
+
+        When via_proxy=True, use a much shorter delay since each proxy IP
+        has its own rate-limit budget on Bilibili's side.
+        """
         async with self._semaphore:
             now = time.time()
-            # Add random jitter: base_delay to base_delay*2.5
-            jitter = random.uniform(self._base_delay, self._base_delay * 2.5)
-            wait = max(0, jitter - (now - self._last_request_time))
+            if via_proxy:
+                delay = random.uniform(0.2, 0.6)
+            else:
+                delay = random.uniform(self._base_delay, self._base_delay * 2.5)
+            wait = max(0, delay - (now - self._last_request_time))
             if wait > 0:
                 await asyncio.sleep(wait)
             self._last_request_time = time.time()
 
-    async def _request(self, url: str, params: dict | None = None, wbi: bool = False) -> dict:
+    async def _request(self, url: str, params: dict | None = None, wbi: bool = False, use_proxy: bool = True) -> dict:
         await self._ensure_fingerprint()
         raw_params = params or {}
         max_retries = 3
         data: dict | None = None
+
+        # Determine which client to use
+        pool = await self._ensure_proxy_pool() if use_proxy else None
+        proxy_result = await pool.get_client() if pool else None
+        active_client = proxy_result[0] if proxy_result else self._client
+        active_entry = proxy_result[1] if proxy_result else None
+
         for attempt in range(max_retries):
-            await self._throttle()
+            await self._throttle(via_proxy=active_entry is not None)
             request_params = raw_params
             if wbi:
                 if not self._img_key or time.time() - self._wbi_keys_ts > self._WBI_KEY_TTL:
                     await self._refresh_wbi_keys()
                 request_params = self._sign_wbi(raw_params)
-            resp = await self._client.get(url, params=request_params)
+            try:
+                resp = await active_client.get(url, params=request_params)
+            except (httpx.ConnectError, httpx.ProxyError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+                if active_entry and pool:
+                    pool.report_failure(active_entry)
+                    logger.warning("Proxy %s connection error: %s, switching proxy", active_entry.url, e)
+                    proxy_result = await pool.get_client()
+                    if proxy_result:
+                        active_client, active_entry = proxy_result
+                    else:
+                        active_client, active_entry = self._client, None
+                        logger.info("All proxies unavailable, falling back to direct connection")
+                    continue
+                raise
             if resp.status_code == 412:
+                if active_entry and pool:
+                    pool.report_failure(active_entry)
+                    proxy_result = await pool.get_client()
+                    if proxy_result:
+                        active_client, active_entry = proxy_result
+                    else:
+                        active_client, active_entry = self._client, None
                 if wbi:
                     await self._refresh_wbi_keys()
                 if attempt < max_retries - 1:
@@ -147,9 +194,31 @@ class BilibiliClient:
                     continue
             resp.raise_for_status()
             data = resp.json()
+            code = data.get("code")
+            # Retry on server timeout (-504) with proxy rotation
+            if code == -504:
+                if active_entry and pool:
+                    pool.report_failure(active_entry)
+                    proxy_result = await pool.get_client()
+                    if proxy_result:
+                        active_client, active_entry = proxy_result
+                    else:
+                        active_client, active_entry = self._client, None
+                if attempt < max_retries - 1:
+                    delay = 2 + attempt * 3 + random.uniform(0, 1)
+                    logger.warning("Server timeout (-504) from %s, retrying in %.1fs (attempt %d/%d)", url, delay, attempt + 1, max_retries)
+                    await asyncio.sleep(delay)
+                    continue
             # Retry on rate limit (-799) with exponential backoff
-            if data.get("code") == -799:
+            elif code == -799:
                 self._rate_limit_count += 1
+                if active_entry and pool:
+                    pool.report_failure(active_entry)
+                    proxy_result = await pool.get_client()
+                    if proxy_result:
+                        active_client, active_entry = proxy_result
+                    else:
+                        active_client, active_entry = self._client, None
                 # Increase base delay if getting rate limited frequently
                 if self._rate_limit_count >= 3:
                     self._base_delay = min(self._base_delay * 1.5, 5.0)
@@ -164,6 +233,8 @@ class BilibiliClient:
                 # Reset rate limit counter on success
                 if self._rate_limit_count > 0:
                     self._rate_limit_count = max(0, self._rate_limit_count - 1)
+                if active_entry and pool:
+                    pool.report_success(active_entry)
             return data
         if data is not None:
             return data
@@ -184,7 +255,7 @@ class BilibiliClient:
     async def validate_sessdata(self) -> dict:
         if not self._sessdata:
             raise Exception("SESSDATA not configured")
-        data = await self._request(f"{self.BASE}/x/web-interface/nav")
+        data = await self._request(f"{self.BASE}/x/web-interface/nav", use_proxy=False)
         if data.get("code") != 0:
             raise Exception(f"Bilibili API error {data.get('code')}: {data.get('message')}")
         nav = data.get("data") or {}
@@ -578,6 +649,7 @@ class BilibiliClient:
             f"{self.BASE}/x/player/wbi/v2",
             params={"aid": aid, "bvid": bvid, "cid": cid},
             wbi=True,
+            use_proxy=False,
         )
         subtitles = data.get("data", {}).get("subtitle", {}).get("subtitles", [])
         if not subtitles:
