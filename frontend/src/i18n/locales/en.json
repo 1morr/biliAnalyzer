@@ -25,7 +25,30 @@
     "toggleOrder": "Toggle sort order",
     "previous": "Previous", "next": "Next", "pageOf": "Page {{page}} of {{total}}"
   },
-  "ai": { "title": "AI Analysis", "analyze": "AI Analysis", "regenerate": "Regenerate", "notConfigured": "Please configure AI first", "analyzing": "Analyzing..." },
+  "ai": {
+    "title": "AI Analysis",
+    "analyze": "AI Analysis",
+    "regenerate": "Regenerate",
+    "notConfigured": "Please configure AI first",
+    "analyzing": "Analyzing...",
+    "newAnalysis": "New Analysis",
+    "conversations": "Conversations",
+    "noConversations": "No conversations yet",
+    "backToPresets": "Back",
+    "presets": {
+      "overallAnalysis": "Overall Analysis",
+      "overallAnalysisDesc": "Comprehensive channel performance analysis with actionable insights",
+      "topicInspiration": "Topic Inspiration",
+      "topicInspirationDesc": "Content topic recommendations based on data patterns",
+      "videoAnalysis": "Video Analysis",
+      "videoAnalysisDesc": "Deep analysis of a specific video's performance"
+    },
+    "toolQuerying": "Querying data",
+    "sendMessage": "Send",
+    "inputPlaceholder": "Ask a follow-up question...",
+    "deleteConversation": "Delete conversation",
+    "deleteConfirm": "Delete this conversation?"
+  },
   "settings": {
     "title": "Settings", "bilibili": "Bilibili Connection", "sessdata": "SESSDATA",
     "sessdataHelp": "Get SESSDATA from browser cookies to enable danmaku and subtitle features",

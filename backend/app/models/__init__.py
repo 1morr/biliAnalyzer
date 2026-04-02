@@ -3,5 +3,6 @@ from app.models.video import Video, VideoStats, VideoContent
 from app.models.query import Query, QueryVideo
 from app.models.settings import AppSettings
 from app.models.sentiment import VideoSentiment
+from app.models.conversation import AIConversation, AIMessage
 
-__all__ = ["User", "Video", "VideoStats", "VideoContent", "Query", "QueryVideo", "AppSettings", "VideoSentiment"]
+__all__ = ["User", "Video", "VideoStats", "VideoContent", "Query", "QueryVideo", "AppSettings", "VideoSentiment", "AIConversation", "AIMessage"]

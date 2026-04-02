@@ -1,4 +1,4 @@
-import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter, SentimentOverview, SentimentTrendPoint, SentimentWordItem, DemographicSentimentCell, SentimentContextResponse } from "@/types";
+import type { QuerySummary, QueryDetail, VideoDetail, PaginatedVideos, StatsSummary, TrendPoint, InteractionData, VideoComparison, SettingsResponse, WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse, DemographicsFilter, SentimentOverview, SentimentTrendPoint, SentimentWordItem, DemographicSentimentCell, SentimentContextResponse, AIConversation, AIConversationDetail } from "@/types";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
@@ -66,6 +66,30 @@ export const api = {
   getVideoWordDetail: (bvid: string, type: string, word: string, filter?: DemographicsFilter) =>
     request<WordDetailResponse>(`/videos/${bvid}/wordcloud/${type}/detail?word=${encodeURIComponent(word)}${buildFilterParams(filter, "&")}`),
   aiAnalyzeUrl: (queryId: number) => `${BASE}/queries/${queryId}/ai/analyze`,
+
+  // AI Conversations — query-scoped
+  getAIConversations: (queryId: number) =>
+    request<AIConversation[]>(`/queries/${queryId}/ai/conversations`),
+  getAIConversation: (queryId: number, convId: number) =>
+    request<AIConversationDetail>(`/queries/${queryId}/ai/conversations/${convId}`),
+  deleteAIConversation: (queryId: number, convId: number) =>
+    request(`/queries/${queryId}/ai/conversations/${convId}`, { method: "DELETE" }),
+  createAIConversationUrl: (queryId: number) =>
+    `${BASE}/queries/${queryId}/ai/conversations`,
+  sendAIMessageUrl: (queryId: number, convId: number) =>
+    `${BASE}/queries/${queryId}/ai/conversations/${convId}/messages`,
+
+  // AI Conversations — video-scoped
+  getVideoAIConversations: (bvid: string) =>
+    request<AIConversation[]>(`/videos/${bvid}/ai/conversations`),
+  getVideoAIConversation: (bvid: string, convId: number) =>
+    request<AIConversationDetail>(`/videos/${bvid}/ai/conversations/${convId}`),
+  deleteVideoAIConversation: (bvid: string, convId: number) =>
+    request(`/videos/${bvid}/ai/conversations/${convId}`, { method: "DELETE" }),
+  createVideoAIConversationUrl: (bvid: string) =>
+    `${BASE}/videos/${bvid}/ai/conversations`,
+  sendVideoAIMessageUrl: (bvid: string, convId: number) =>
+    `${BASE}/videos/${bvid}/ai/conversations/${convId}/messages`,
 
   // Sentiment analysis
   getSentimentOverview: (queryId: number) =>

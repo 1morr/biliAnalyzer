@@ -25,7 +25,30 @@
     "toggleOrder": "切换排序方向",
     "previous": "上一页", "next": "下一页", "pageOf": "第 {{page}} 页，共 {{total}} 页"
   },
-  "ai": { "title": "AI 分析", "analyze": "AI 分析", "regenerate": "重新生成", "notConfigured": "请先配置AI", "analyzing": "分析中..." },
+  "ai": {
+    "title": "AI 分析",
+    "analyze": "AI 分析",
+    "regenerate": "重新生成",
+    "notConfigured": "请先配置AI",
+    "analyzing": "分析中...",
+    "newAnalysis": "新建分析",
+    "conversations": "历史对话",
+    "noConversations": "暂无对话记录",
+    "backToPresets": "返回",
+    "presets": {
+      "overallAnalysis": "整体分析",
+      "overallAnalysisDesc": "频道整体表现分析与可执行建议",
+      "topicInspiration": "选题灵感",
+      "topicInspirationDesc": "基于数据模式的内容选题推荐",
+      "videoAnalysis": "视频分析",
+      "videoAnalysisDesc": "单个视频的深度表现分析"
+    },
+    "toolQuerying": "正在查询数据",
+    "sendMessage": "发送",
+    "inputPlaceholder": "输入追问...",
+    "deleteConversation": "删除对话",
+    "deleteConfirm": "确认删除此对话？"
+  },
   "settings": {
     "title": "设置", "bilibili": "Bilibili 连接", "sessdata": "SESSDATA",
     "sessdataHelp": "从浏览器Cookie获取SESSDATA以启用弹幕和字幕功能",

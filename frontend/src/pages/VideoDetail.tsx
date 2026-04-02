@@ -11,12 +11,15 @@ import ComparisonBars from "@/components/video/ComparisonBars";
 import VideoWordClouds from "@/components/video/VideoWordClouds";
 import UserDemographicsPanel from "@/components/shared/UserDemographicsPanel";
 import SentimentPanel from "@/components/sentiment/SentimentPanel";
+import AIPanel from "@/components/dashboard/AIPanel";
+import { useDashboardContext } from "@/components/layout/AppLayout";
 
 export default function VideoDetailPage() {
   const { t } = useTranslation();
   const { bvid } = useParams<{ bvid: string }>();
   const [searchParams] = useSearchParams();
   const queryId = searchParams.get("query") ? Number(searchParams.get("query")) : null;
+  const { setOnAiClick } = useDashboardContext();
 
   const [video, setVideo] = useState<VideoDetail | null>(null);
   const [comparison, setComparison] = useState<VideoComparison | null>(null);
@@ -25,6 +28,7 @@ export default function VideoDetailPage() {
   const [demoFilter, setDemoFilter] = useState<DemographicsFilter>(createEmptyFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (!bvid) return;
@@ -64,6 +68,16 @@ export default function VideoDetailPage() {
       .catch(() => setError(t("common.error")))
       .finally(() => setLoading(false));
   }, [bvid, queryId, t]);
+
+  // Wire AI button in TopBar
+  useEffect(() => {
+    if (video) {
+      setOnAiClick(() => setAiOpen(true));
+    } else {
+      setOnAiClick(undefined);
+    }
+    return () => setOnAiClick(undefined);
+  }, [video, setOnAiClick]);
 
   const backTo = queryId ? `/dashboard/${queryId}` : "/dashboard";
 
@@ -125,6 +139,16 @@ export default function VideoDetailPage() {
       <div className="rounded-xl border border-border bg-card p-4">
         <SentimentPanel bvid={video.bvid} />
       </div>
+
+      {/* AI Panel */}
+      {bvid && (
+        <AIPanel
+          bvid={bvid}
+          queryId={queryId ?? undefined}
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+        />
+      )}
     </div>
   );
 }

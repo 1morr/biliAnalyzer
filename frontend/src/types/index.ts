@@ -174,3 +174,38 @@ export interface SentimentContextResponse {
   total_count: number;
   items: SentimentContextItem[];
 }
+
+// AI Conversation Types
+
+export interface AIPreset {
+  id: string;
+  labelKey: string;
+  descriptionKey: string;
+  icon: string;
+}
+
+export interface AIConversation {
+  id: number;
+  preset: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string | null;
+  message_count: number;
+}
+
+export interface AIMessageItem {
+  id: number;
+  role: "user" | "assistant";
+  content: string | null;
+  tool_calls?: string[] | null;  // function names called by this assistant message
+  created_at: string;
+}
+
+export interface AIConversationDetail {
+  id: number;
+  preset: string;
+  title: string | null;
+  query_id: number | null;
+  bvid: string | null;
+  messages: AIMessageItem[];
+}

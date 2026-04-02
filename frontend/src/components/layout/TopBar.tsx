@@ -42,7 +42,7 @@ export default function TopBar({ queryDetail, onAiClick }: TopBarProps) {
 
       {/* Right: AI Analysis button + theme toggle */}
       <div className="flex items-center gap-2">
-        {queryDetail && queryDetail.status === "done" && onAiClick && (
+        {onAiClick && (
           <Button
             onClick={onAiClick}
             size="sm"
