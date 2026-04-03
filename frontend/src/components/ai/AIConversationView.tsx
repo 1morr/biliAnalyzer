@@ -70,7 +70,7 @@ function ToolBadge({ tool }: { tool: ToolCallInfo }) {
 function ToolBadgeList({ tools }: { tools: ToolCallInfo[] }) {
   if (tools.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1 mb-2">
+    <div className="flex flex-wrap items-start gap-1 mb-2">
       {tools.map((tool, i) => <ToolBadge key={i} tool={tool} />)}
     </div>
   );
