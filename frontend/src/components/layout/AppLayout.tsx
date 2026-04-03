@@ -1,5 +1,5 @@
 import { Outlet, useOutletContext } from "react-router-dom";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import type { QueryDetail } from "@/types";
@@ -17,12 +17,15 @@ export default function AppLayout() {
   const [queryDetail, setQueryDetail] = useState<QueryDetail | undefined>(undefined);
   const [onAiClick, setOnAiClickState] = useState<(() => void) | undefined>(undefined);
 
-  // Wrap setter so Dashboard can pass a function reference cleanly
-  function setOnAiClick(fn: (() => void) | undefined) {
+  // Stable setter — avoids infinite re-render loops in child effects
+  const setOnAiClick = useCallback((fn: (() => void) | undefined) => {
     setOnAiClickState(fn ? () => fn : undefined);
-  }
+  }, []);
 
-  const context: DashboardContext = { setQueryDetail, setOnAiClick };
+  const context = useMemo<DashboardContext>(
+    () => ({ setQueryDetail, setOnAiClick }),
+    [setQueryDetail, setOnAiClick],
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
