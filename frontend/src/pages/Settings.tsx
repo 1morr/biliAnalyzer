@@ -343,7 +343,7 @@ export default function Settings() {
             <Label>{t("settings.language")}</Label>
             <Select value={lang} onValueChange={handleLangChange}>
               <SelectTrigger className="w-40">
-                <SelectValue />
+                <SelectValue>{lang === "zh" ? "中文" : "English"}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="zh">中文</SelectItem>
