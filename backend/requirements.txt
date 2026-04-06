@@ -10,3 +10,4 @@ python-dotenv>=1.0.0
 pydantic-settings>=2.0.0
 sse-starlette>=2.0.0
 snownlp>=0.12.3
+aiofiles>=23.0.0
