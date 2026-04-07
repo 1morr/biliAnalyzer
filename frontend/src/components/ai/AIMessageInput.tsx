@@ -32,7 +32,10 @@ export default function AIMessageInput({ onSend, disabled }: AIMessageInputProps
     const el = textareaRef.current;
     if (el) {
       el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      const maxH = 120;
+      const needsScroll = el.scrollHeight > maxH;
+      el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
+      el.style.overflowY = needsScroll ? "auto" : "hidden";
     }
   }, [value]);
 
