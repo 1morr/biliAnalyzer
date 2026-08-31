@@ -307,10 +307,18 @@
     -webkit-text-emphasis-position: under right;
   }
 
-  /* 花邊：報刊的分節雙線 */
+  /* 花邊：報刊的分節雙線。
+     用 box-shadow 疊第二條是錯的 —— 陰影畫的是整個盒子的輪廓，露出來的
+     反而是元件「下緣」那一條，欄標題就會貼在一條不該存在的線上。
+     border-style: double 本來就是「細線—空隙—細線」。 */
   .rule-double {
     border-top: 1px solid var(--rule-2);
-    box-shadow: 0 2px 0 -1px var(--rule-2);
+    /* 第二條線畫進內距裡，元件下緣就不會多出一條。border-style: double 在
+       這個級數下會糊成一條粗線，所以用漸層自己畫。 */
+    background-image: linear-gradient(var(--rule-2), var(--rule-2));
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    background-position: 0 2px;
   }
 
   /* 欄標題：小級數、寬字距、墨色最弱 */
