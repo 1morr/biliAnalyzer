@@ -103,7 +103,7 @@ export default function VideoWordTables({
         </ToggleGroup>
       }
     >
-      <WordTable words={words} loading={loading} onWordClick={handleWordClick} limit={64} />
+      <WordTable words={words} loading={loading} onWordClick={handleWordClick} limit={24} />
       <WordDetailPanel
         open={detailOpen}
         onOpenChange={setDetailOpen}

@@ -79,20 +79,20 @@
       "pos": {
         "role": "tertiary",
         "displayName": "暖墨 Warm Ink (正面)",
-        "canonical": "oklch(0.430 0.055 45)",
-        "tonalRamp": ["oklch(0.170 0.030 45)", "oklch(0.260 0.045 45)", "oklch(0.340 0.052 45)", "oklch(0.430 0.055 45)", "oklch(0.550 0.052 48)", "oklch(0.680 0.050 52)", "oklch(0.800 0.045 56)", "oklch(0.930 0.030 60)"]
+        "canonical": "oklch(0.455 0.090 45)",
+        "tonalRamp": ["oklch(0.170 0.030 45)", "oklch(0.260 0.045 45)", "oklch(0.340 0.052 45)", "oklch(0.455 0.090 45)", "oklch(0.550 0.052 48)", "oklch(0.680 0.050 52)", "oklch(0.800 0.045 56)", "oklch(0.930 0.030 60)"]
       },
       "neu": {
         "role": "tertiary",
         "displayName": "中性墨 Neutral Ink",
-        "canonical": "oklch(0.760 0.005 80)",
-        "tonalRamp": ["oklch(0.170 0.005 80)", "oklch(0.265 0.005 80)", "oklch(0.400 0.005 80)", "oklch(0.520 0.005 80)", "oklch(0.640 0.005 80)", "oklch(0.760 0.005 80)", "oklch(0.860 0.005 80)", "oklch(0.940 0.005 80)"]
+        "canonical": "oklch(0.700 0.006 80)",
+        "tonalRamp": ["oklch(0.170 0.005 80)", "oklch(0.265 0.005 80)", "oklch(0.430 0.006 80)", "oklch(0.520 0.005 80)", "oklch(0.640 0.005 80)", "oklch(0.700 0.006 80)", "oklch(0.860 0.005 80)", "oklch(0.940 0.005 80)"]
       },
       "neg": {
         "role": "tertiary",
         "displayName": "冷墨 Cool Ink (負面)",
-        "canonical": "oklch(0.500 0.045 250)",
-        "tonalRamp": ["oklch(0.170 0.025 250)", "oklch(0.265 0.035 250)", "oklch(0.380 0.042 250)", "oklch(0.500 0.045 250)", "oklch(0.610 0.043 250)", "oklch(0.720 0.040 250)", "oklch(0.830 0.030 250)", "oklch(0.935 0.018 250)"]
+        "canonical": "oklch(0.480 0.090 250)",
+        "tonalRamp": ["oklch(0.170 0.025 250)", "oklch(0.265 0.035 250)", "oklch(0.380 0.042 250)", "oklch(0.480 0.090 250)", "oklch(0.610 0.043 250)", "oklch(0.720 0.040 250)", "oklch(0.830 0.030 250)", "oklch(0.935 0.018 250)"]
       },
       "seq-1": {
         "role": "neutral",

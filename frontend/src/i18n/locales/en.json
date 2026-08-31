@@ -316,7 +316,8 @@
       "vip": "VIP",
       "location": "Location"
     },
-    "wordsLabel": "Words — size is frequency, ink is sentiment",
-    "matrixNote": "The rule is split by share of sentiment; the figure at right is the average score (0–100)."
+    "matrixNote": "The rule is split by share of sentiment; the figure at right is the average score (0–100).",
+    "warmest": "Warmest words",
+    "coldest": "Coldest words"
   }
 }

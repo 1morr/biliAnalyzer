@@ -102,7 +102,7 @@ export default function WordTableGrid({
         </ToggleGroup>
       }
     >
-      <WordTable words={words} loading={loading} onWordClick={handleWordClick} limit={80} />
+      <WordTable words={words} loading={loading} onWordClick={handleWordClick} limit={32} />
       <WordDetailPanel
         open={detailOpen}
         onOpenChange={setDetailOpen}

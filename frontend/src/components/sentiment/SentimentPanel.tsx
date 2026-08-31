@@ -13,13 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Column } from "@/components/proof/Sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Inking } from "@/components/proof/States";
-import WordTable, { type WordTableItem } from "@/components/shared/WordTable";
 import SentimentRule from "./SentimentRule";
-import { combineDistributions, toTone } from "@/lib/sentiment";
+import { combineDistributions } from "@/lib/sentiment";
 import SentimentTrendChart from "./SentimentTrendChart";
 import SentimentMatrix from "./SentimentMatrix";
 import SentimentContextPanel from "./SentimentContextPanel";
-import ToneKey from "./ToneKey";
+import SentimentWords from "./SentimentWords";
 
 interface Props {
   queryId?: number;
@@ -183,17 +182,6 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     [overview?.danmaku, overview?.comment],
   );
 
-  const toWordItems = useCallback(
-    (words: SentimentWordItem[]): WordTableItem[] =>
-      words.map((w) => ({
-        name: w.name,
-        value: w.value,
-        tone: toTone(w.avg_score),
-        toneLabel: t(`sentiment.${w.label}`),
-      })),
-    [t],
-  );
-
   if (!overview || overview.status === null) {
     if (!isQuery) return null;
     return (
@@ -258,22 +246,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
                 source={current.key}
                 onSegmentClick={segmentHandler}
               />
-              {/* 這份詞表與「詞表」一節排的是同一批詞：它必須自己說出
-                  差別在哪 —— 字級是次數，墨色是情感。 */}
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <h4 className="column-label font-sans">{t("sentiment.wordsLabel")}</h4>
-                  <ToneKey variant="ink" />
-                </div>
-                <WordTable
-                  words={toWordItems(current.words)}
-                  loading={false}
-                  onWordClick={wordHandler(current.key)}
-                  limit={64}
-                  showTone
-                  minHeight={160}
-                />
-              </div>
+              <SentimentWords words={current.words} onWordClick={wordHandler(current.key)} />
             </div>
           </Column>
 
