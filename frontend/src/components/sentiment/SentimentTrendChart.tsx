@@ -1,103 +1,89 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
+import { chartBase, categoryAxis, valueAxis, useChartTokens, NAME_SIZE } from "@/lib/chart-theme";
+import { NoInk } from "@/components/proof/States";
 import type { SentimentTrendPoint } from "@/types";
 
-interface Props {
+/**
+ * 情感走勢 —— two record lines, ink for danmaku and blue pencil for comments.
+ * The 50 line is where sentiment turns, so it is drawn as a rule, not implied.
+ */
+export default function SentimentTrendChart({
+  data,
+  height = 200,
+}: {
   data: SentimentTrendPoint[];
-}
-
-export default function SentimentTrendChart({ data }: Props) {
+  height?: number;
+}) {
   const { t } = useTranslation();
-  const isDark = document.documentElement.classList.contains("dark");
+  const k = useChartTokens();
 
-  const option = useMemo(() => ({
-    backgroundColor: "transparent",
-    tooltip: {
-      trigger: "axis",
-      formatter: (params: Array<{ seriesName: string; value: number; marker: string; dataIndex: number }>) => {
-        const date = data[params[0]?.dataIndex]?.date ?? "";
-        let html = `<b>${date}</b><br/>`;
-        for (const p of params) {
-          if (p.value != null) html += `${p.marker} ${p.seriesName}: ${(p.value * 100).toFixed(1)}<br/>`;
-        }
-        return html;
+  const option = useMemo(
+    () => ({
+      ...chartBase(k),
+      tooltip: {
+        ...chartBase(k).tooltip,
+        trigger: "axis",
+        valueFormatter: (v: number | null) => (v == null ? "—" : (v * 100).toFixed(1)),
       },
-    },
-    legend: {
-      bottom: 0,
-      textStyle: { color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11 },
-    },
-    xAxis: {
-      type: "category",
-      data: data.map((p) => p.date),
-      axisLabel: { color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11 },
-      axisLine: { lineStyle: { color: isDark ? "#374151" : "#e5e7eb" } },
-    },
-    yAxis: {
-      type: "value",
-      min: 0, max: 1,
-      axisLabel: {
-        color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11,
-        formatter: (v: number) => `${(v * 100).toFixed(0)}`,
+      legend: {
+        data: [t("sentiment.danmakuSentiment"), t("sentiment.commentSentiment")],
+        textStyle: { color: k.ink3, fontSize: NAME_SIZE, fontFamily: k.font },
+        icon: "rect",
+        itemWidth: 9,
+        itemHeight: 9,
+        right: 0,
+        top: 0,
       },
-      splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
-    },
-    series: [
-      {
-        name: t("sentiment.danmakuSentiment"),
-        type: "line",
-        data: data.map((p) => p.danmaku_avg),
-        smooth: true,
-        symbol: "circle",
-        symbolSize: 5,
-        lineStyle: { color: "#3b82f6", width: 2 },
-        itemStyle: { color: "#3b82f6" },
-        areaStyle: {
-          color: {
-            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: isDark ? "rgba(59,130,246,0.25)" : "rgba(59,130,246,0.15)" },
-              { offset: 1, color: "rgba(59,130,246,0)" },
-            ],
+      grid: { left: 30, right: 30, top: 30, bottom: 4, containLabel: true },
+      xAxis: categoryAxis(k, { data: data.map((p) => p.date), boundaryGap: false }),
+      yAxis: valueAxis(k, {
+        min: 0,
+        max: 1,
+        axisLabel: {
+          color: k.ink3,
+          fontSize: 10,
+          fontFamily: k.font,
+          formatter: (v: number) => (v * 100).toFixed(0),
+        },
+      }),
+      series: [
+        {
+          name: t("sentiment.danmakuSentiment"),
+          type: "line",
+          data: data.map((p) => p.danmaku_avg),
+          connectNulls: true,
+          smooth: false,
+          symbol: "circle",
+          symbolSize: 4,
+          lineStyle: { color: k.ink, width: 1.5 },
+          itemStyle: { color: k.ink },
+          markLine: {
+            silent: true,
+            symbol: "none",
+            lineStyle: { color: k.rule2, width: 1, type: "solid" },
+            label: { show: false },
+            data: [{ yAxis: 0.5 }],
           },
         },
-      },
-      {
-        name: t("sentiment.commentSentiment"),
-        type: "line",
-        data: data.map((p) => p.comment_avg),
-        smooth: true,
-        symbol: "circle",
-        symbolSize: 5,
-        lineStyle: { color: "#f59e0b", width: 2 },
-        itemStyle: { color: "#f59e0b" },
-        areaStyle: {
-          color: {
-            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: isDark ? "rgba(245,158,11,0.25)" : "rgba(245,158,11,0.15)" },
-              { offset: 1, color: "rgba(245,158,11,0)" },
-            ],
-          },
+        {
+          name: t("sentiment.commentSentiment"),
+          type: "line",
+          data: data.map((p) => p.comment_avg),
+          connectNulls: true,
+          smooth: false,
+          symbol: "circle",
+          symbolSize: 4,
+          lineStyle: { color: k.seq[2], width: 1.5, type: "dashed" },
+          itemStyle: { color: k.seq[2] },
         },
-      },
-    ],
-    grid: { left: 40, right: 12, top: 12, bottom: 36 },
-  }), [data, isDark, t]);
-
-  if (data.length === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        {t("common.noData")}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <p className="mb-1 text-sm font-medium text-foreground">{t("sentiment.trend")}</p>
-      <ReactECharts option={option} style={{ height: 180 }} />
-    </div>
+      ],
+    }),
+    [data, k, t],
   );
+
+  if (!data.length) return <NoInk className="py-10" />;
+
+  return <ReactECharts option={option} style={{ height }} notMerge lazyUpdate />;
 }

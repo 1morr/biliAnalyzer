@@ -1,97 +1,91 @@
+import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTranslation } from "react-i18next";
+import { chartBase, useChartTokens, NAME_SIZE } from "@/lib/chart-theme";
+import { NoInk } from "@/components/proof/States";
 import type { VideoComparison } from "@/types";
 
-interface RadarChartProps {
+/**
+ * 本篇 vs 平均 —— the video in vermilion over the run's average in ink outline.
+ * Each axis is normalised against the run's own maximum, so the shape is
+ * comparable across metrics with wildly different units.
+ */
+export default function RadarChart({
+  data,
+  height = 280,
+}: {
   data: VideoComparison | null;
-}
-
-export default function RadarChart({ data }: RadarChartProps) {
+  height?: number;
+}) {
   const { t } = useTranslation();
+  const k = useChartTokens();
 
-  const METRIC_LABELS = [
-    t("stats.totalViews"),
-    t("stats.likes"),
-    t("stats.coins"),
-    t("stats.favorites"),
-    t("stats.shares"),
-    t("stats.danmaku"),
-    t("stats.comments"),
-  ];
-
-  if (!data) {
-    return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        {t("common.noData")}
-      </div>
-    );
-  }
-
-  const isDark = document.documentElement.classList.contains("dark");
-
-  // Normalize each metric using global max values from the query
-  const videoNorm = data.video_values.map((v, i) => {
-    const maxVal = Math.max(data.max_values[i], 1);
-    return (v / maxVal) * 100;
-  });
-
-  const avgNorm = data.average_values.map((v, i) => {
-    const maxVal = Math.max(data.max_values[i], 1);
-    return (v / maxVal) * 100;
-  });
-
-  const indicators = METRIC_LABELS.map((name) => ({ name, max: 100 }));
-
-  const axisLabelColor = isDark ? "#9ca3af" : "#6b7280";
-  const splitLineColor = isDark ? "#1f2937" : "#e5e7eb";
-
-  const option = {
-    backgroundColor: "transparent",
-    tooltip: {
-      trigger: "item",
-    },
-    legend: {
-      data: [t("video.thisVideo"), t("video.average")],
-      bottom: 0,
-      textStyle: { color: axisLabelColor, fontSize: 12 },
-    },
-    radar: {
-      indicator: indicators,
-      radius: "60%",
-      center: ["50%", "48%"],
-      splitNumber: 4,
-      axisName: { color: axisLabelColor, fontSize: 11 },
-      splitLine: { lineStyle: { color: splitLineColor } },
-      splitArea: { show: false },
-      axisLine: { lineStyle: { color: splitLineColor } },
-    },
-    series: [
-      {
-        type: "radar",
-        data: [
-          {
-            value: videoNorm,
-            name: t("video.thisVideo"),
-            areaStyle: { color: "rgba(99,102,241,0.3)" },
-            lineStyle: { color: "#6366f1", width: 2 },
-            itemStyle: { color: "#6366f1" },
-          },
-          {
-            value: avgNorm,
-            name: t("video.average"),
-            areaStyle: { color: "rgba(239,68,68,0.05)" },
-            lineStyle: { color: "#ef4444", width: 2, type: "dashed" },
-            itemStyle: { color: "#ef4444" },
-          },
-        ],
-      },
+  const labels = useMemo(
+    () => [
+      t("stats.totalViews"),
+      t("stats.likes"),
+      t("stats.coins"),
+      t("stats.favorites"),
+      t("stats.shares"),
+      t("stats.danmaku"),
+      t("stats.comments"),
     ],
-  };
-
-  return (
-    <div>
-      <p className="mb-2 text-sm font-medium text-foreground">{t("video.comparison")}</p>
-      <ReactECharts option={option} style={{ height: 280 }} />
-    </div>
+    [t],
   );
+
+  const option = useMemo(() => {
+    if (!data) return null;
+    const norm = (values: number[]) =>
+      values.map((v, i) => (v / Math.max(data.max_values[i], 1)) * 100);
+
+    return {
+      ...chartBase(k),
+      tooltip: { ...chartBase(k).tooltip, trigger: "item" },
+      legend: {
+        data: [t("video.thisVideo"), t("video.average")],
+        textStyle: { color: k.ink3, fontSize: NAME_SIZE, fontFamily: k.font },
+        icon: "rect",
+        itemWidth: 9,
+        itemHeight: 9,
+        bottom: 0,
+      },
+      radar: {
+        indicator: labels.map((name) => ({ name, max: 100 })),
+        radius: "62%",
+        center: ["50%", "46%"],
+        splitNumber: 4,
+        shape: "polygon",
+        axisName: { color: k.ink3, fontSize: NAME_SIZE, fontFamily: k.font },
+        splitLine: { lineStyle: { color: k.rule } },
+        splitArea: { show: false },
+        axisLine: { lineStyle: { color: k.rule } },
+      },
+      series: [
+        {
+          type: "radar",
+          symbolSize: 4,
+          data: [
+            {
+              value: norm(data.video_values),
+              name: t("video.thisVideo"),
+              areaStyle: { color: k.mark, opacity: 0.16 },
+              lineStyle: { color: k.mark, width: 1.5 },
+              itemStyle: { color: k.mark },
+            },
+            {
+              value: norm(data.average_values),
+              name: t("video.average"),
+              areaStyle: { opacity: 0 },
+              lineStyle: { color: k.ink2, width: 1, type: "dashed" },
+              itemStyle: { color: k.ink2 },
+            },
+          ],
+        },
+      ],
+    };
+  }, [data, labels, k, t]);
+
+  if (!option) return <NoInk className="py-16" />;
+
+  return <ReactECharts option={option} style={{ height }} notMerge lazyUpdate />;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GAP } from "@/lib/format";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type {
@@ -9,16 +10,23 @@ import type {
   SentimentContextResponse,
 } from "@/types";
 import { Button } from "@/components/ui/button";
-import SentimentDistributionChart, { combineDistributions } from "./SentimentDistributionChart";
+import { Column } from "@/components/proof/Sheet";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Inking } from "@/components/proof/States";
+import WordTable, { type WordTableItem } from "@/components/shared/WordTable";
+import SentimentRule from "./SentimentRule";
+import { combineDistributions, toTone } from "@/lib/sentiment";
 import SentimentTrendChart from "./SentimentTrendChart";
-import SentimentWordCloud from "./SentimentWordCloud";
-import DemographicSentimentMatrix from "./DemographicSentimentMatrix";
+import SentimentMatrix from "./SentimentMatrix";
 import SentimentContextPanel from "./SentimentContextPanel";
+import ToneKey from "./ToneKey";
 
 interface Props {
   queryId?: number;
   bvid?: string;
 }
+
+const EMPTY_CONTEXT: SentimentContextResponse = { total_count: 0, items: [] };
 
 export default function SentimentPanel({ queryId, bvid }: Props) {
   const { t } = useTranslation();
@@ -30,27 +38,27 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
   const [demographics, setDemographics] = useState<DemographicSentimentCell[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [source, setSource] = useState("all");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Context drawer state
   const [contextOpen, setContextOpen] = useState(false);
   const [contextTitle, setContextTitle] = useState("");
   const [contextSubtitle, setContextSubtitle] = useState<string | undefined>();
-  const [contextHighlightWord, setContextHighlightWord] = useState<string | undefined>();
+  const [contextWord, setContextWord] = useState<string | undefined>();
   const [contextFetcher, setContextFetcher] = useState<() => Promise<SentimentContextResponse>>(
-    () => () => Promise.resolve({ total_count: 0, items: [] }),
+    () => () => Promise.resolve(EMPTY_CONTEXT),
   );
 
   const isQuery = queryId != null;
 
-  function clearPoll() {
+  const clearPoll = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  }
+  }, []);
 
-  async function fetchOverview() {
+  const fetchOverview = useCallback(async () => {
     try {
       const ov = isQuery
         ? await api.getSentimentOverview(queryId!)
@@ -60,15 +68,14 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     } catch {
       return null;
     }
-  }
+  }, [isQuery, queryId, bvid]);
 
-  async function fetchAllData() {
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const fetches: Promise<void>[] = [];
-
+      const jobs: Promise<unknown>[] = [];
       if (isQuery) {
-        fetches.push(
+        jobs.push(
           api.getSentimentTrend(queryId!).then(setTrend).catch(() => {}),
           api.getSentimentWordcloud(queryId!, "all").then(setAllWords).catch(() => {}),
           api.getSentimentWordcloud(queryId!, "danmaku").then(setDanmakuWords).catch(() => {}),
@@ -76,21 +83,20 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
           api.getSentimentDemographics(queryId!).then(setDemographics).catch(() => {}),
         );
       } else if (bvid) {
-        fetches.push(
+        jobs.push(
           api.getVideoSentimentWordcloud(bvid, "all").then(setAllWords).catch(() => {}),
           api.getVideoSentimentWordcloud(bvid, "danmaku").then(setDanmakuWords).catch(() => {}),
           api.getVideoSentimentWordcloud(bvid, "comment").then(setCommentWords).catch(() => {}),
           api.getVideoSentimentDemographics(bvid).then(setDemographics).catch(() => {}),
         );
       }
-
-      await Promise.all(fetches);
+      await Promise.all(jobs);
     } finally {
       setLoading(false);
     }
-  }
+  }, [isQuery, queryId, bvid]);
 
-  async function pollStatus() {
+  const pollStatus = useCallback(async () => {
     const ov = await fetchOverview();
     if (ov?.status === "done") {
       clearPoll();
@@ -98,17 +104,9 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     } else if (ov?.status === "error") {
       clearPoll();
     }
-  }
+  }, [fetchOverview, fetchAllData, clearPoll]);
 
   useEffect(() => {
-    setOverview(null);
-    setTrend([]);
-    setAllWords([]);
-    setDanmakuWords([]);
-    setCommentWords([]);
-    setDemographics([]);
-    clearPoll();
-
     if (!queryId && !bvid) return;
 
     (async () => {
@@ -121,8 +119,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     })();
 
     return clearPoll;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryId, bvid]);
+  }, [queryId, bvid, fetchOverview, fetchAllData, pollStatus, clearPoll]);
 
   async function handleTrigger() {
     if (!isQuery) return;
@@ -133,87 +130,92 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
       clearPoll();
       pollRef.current = setInterval(pollStatus, 3000);
     } catch {
-      // ignore
+      setOverview({ status: "error", danmaku: null, comment: null });
     } finally {
       setTriggering(false);
     }
   }
 
-  const handleWordClick = useCallback((word: string, source: string) => {
-    const params: Record<string, string> = { word };
-    if (source !== "all") params.source = source;
-    setContextTitle(word);
-    setContextSubtitle(source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined);
-    setContextHighlightWord(word);
-    setContextFetcher(() => () =>
-      isQuery
-        ? api.getSentimentContexts(queryId!, params)
-        : api.getVideoSentimentContexts(bvid!, params),
-    );
-    setContextOpen(true);
-  }, [isQuery, queryId, bvid, t]);
+  const openContext = useCallback(
+    (
+      title: string,
+      params: Record<string, string>,
+      opts: { subtitle?: string; word?: string } = {},
+    ) => {
+      setContextTitle(title);
+      setContextSubtitle(opts.subtitle);
+      setContextWord(opts.word);
+      setContextFetcher(() => () =>
+        isQuery
+          ? api.getSentimentContexts(queryId!, params)
+          : api.getVideoSentimentContexts(bvid!, params),
+      );
+      setContextOpen(true);
+    },
+    [isQuery, queryId, bvid],
+  );
 
-  const handleCellClick = useCallback((dimension: string, category: string) => {
-    const params: Record<string, string> = { dimension, category };
-    setContextTitle(`${t(`sentiment.dim.${dimension}`)}: ${category}`);
-    setContextSubtitle(undefined);
-    setContextHighlightWord(undefined);
-    setContextFetcher(() => () =>
-      isQuery
-        ? api.getSentimentContexts(queryId!, params)
-        : api.getVideoSentimentContexts(bvid!, params),
-    );
-    setContextOpen(true);
-  }, [isQuery, queryId, bvid, t]);
+  const wordHandler = useCallback(
+    (source: string) => (word: string) =>
+      openContext(word, source === "all" ? { word } : { word, source }, {
+        subtitle: source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined,
+        word,
+      }),
+    [openContext, t],
+  );
 
-  const handleSegmentClick = useCallback((label: string, source: string) => {
-    const params: Record<string, string> = { label };
-    if (source !== "all") params.source = source;
-    setContextTitle(t(`sentiment.${label}`));
-    setContextSubtitle(source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined);
-    setContextHighlightWord(undefined);
-    setContextFetcher(() => () =>
-      isQuery
-        ? api.getSentimentContexts(queryId!, params)
-        : api.getVideoSentimentContexts(bvid!, params),
-    );
-    setContextOpen(true);
-  }, [isQuery, queryId, bvid, t]);
+  const segmentHandler = useCallback(
+    (label: string, source: string) =>
+      openContext(t(`sentiment.${label}`), source === "all" ? { label } : { label, source }, {
+        subtitle: source !== "all" ? t(`chart.wordcloud.source.${source}`) : undefined,
+      }),
+    [openContext, t],
+  );
 
-  const combinedDist = useMemo(
+  const cellHandler = useCallback(
+    (dimension: string, category: string) =>
+      openContext(`${t(`sentiment.dim.${dimension}`)}${GAP}${category}`, { dimension, category }),
+    [openContext, t],
+  );
+
+  const combined = useMemo(
     () => combineDistributions(overview?.danmaku ?? null, overview?.comment ?? null),
     [overview?.danmaku, overview?.comment],
   );
 
-  // Not analyzed yet
+  const toWordItems = useCallback(
+    (words: SentimentWordItem[]): WordTableItem[] =>
+      words.map((w) => ({
+        name: w.name,
+        value: w.value,
+        tone: toTone(w.avg_score),
+        toneLabel: t(`sentiment.${w.label}`),
+      })),
+    [t],
+  );
+
   if (!overview || overview.status === null) {
-    if (!isQuery) return null; // Video without data: hide panel
+    if (!isQuery) return null;
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-8">
-        <p className="text-sm text-muted-foreground">{t("sentiment.notAnalyzed")}</p>
-        <Button onClick={handleTrigger} disabled={triggering} size="sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <p className="text-note text-ink-2">{t("sentiment.notAnalyzed")}</p>
+        <Button size="sm" onClick={handleTrigger} disabled={triggering}>
           {triggering ? t("common.loading") : t("sentiment.runAnalysis")}
         </Button>
       </div>
     );
   }
 
-  // Analyzing
   if (overview.status === "analyzing") {
-    return (
-      <div className="flex h-32 items-center justify-center">
-        <p className="text-sm text-blue-500 animate-pulse">{t("sentiment.analyzing")}</p>
-      </div>
-    );
+    return <p className="animate-pulse py-6 text-note text-pencil">{t("sentiment.analyzing")}</p>;
   }
 
-  // Error
   if (overview.status === "error") {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-8">
-        <p className="text-sm text-red-500">{t("sentiment.error")}</p>
+      <div className="flex flex-wrap items-center gap-4">
+        <p className="text-note text-mark">{t("sentiment.error")}</p>
         {isQuery && (
-          <Button onClick={handleTrigger} disabled={triggering} size="sm" variant="outline">
+          <Button size="sm" variant="outline" onClick={handleTrigger} disabled={triggering}>
             {t("sentiment.retry")}
           </Button>
         )}
@@ -221,72 +223,76 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
     );
   }
 
-  // Done — render charts
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">{t("sentiment.title")}</h3>
-        {isQuery && (
-          <Button onClick={handleTrigger} disabled={triggering} size="sm" variant="ghost" className="text-xs">
-            {t("sentiment.reanalyze")}
-          </Button>
-        )}
-      </div>
+  const sources = [
+    { key: "all", label: t("chart.wordcloud.mode.all"), dist: combined, words: allWords },
+    { key: "danmaku", label: t("sentiment.danmakuLabel"), dist: overview.danmaku, words: danmakuWords },
+    { key: "comment", label: t("sentiment.commentLabel"), dist: overview.comment, words: commentWords },
+  ];
+  const current = sources.find((s) => s.key === source) ?? sources[0];
 
+  return (
+    <div className="flex flex-col gap-8">
       {loading ? (
-        <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-muted-foreground animate-pulse">{t("common.loading")}</p>
-        </div>
+        <Inking className="py-12" />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-            <SentimentDistributionChart
-              dist={combinedDist}
-              label={t("chart.wordcloud.mode.all")}
-              source="all"
-              onSegmentClick={handleSegmentClick}
-            />
-            <SentimentDistributionChart
-              dist={overview.danmaku}
-              label={t("sentiment.danmakuLabel")}
-              source="danmaku"
-              onSegmentClick={handleSegmentClick}
-            />
-            <SentimentDistributionChart
-              dist={overview.comment}
-              label={t("sentiment.commentLabel")}
-              source="comment"
-              onSegmentClick={handleSegmentClick}
-            />
-            <SentimentWordCloud
-              words={allWords}
-              label={t("chart.wordcloud.mode.all")}
-              source="all"
-              loading={false}
-              onWordClick={handleWordClick}
-            />
-            <SentimentWordCloud
-              words={danmakuWords}
-              label={t("sentiment.danmakuLabel")}
-              source="danmaku"
-              loading={false}
-              onWordClick={handleWordClick}
-            />
-            <SentimentWordCloud
-              words={commentWords}
-              label={t("sentiment.commentLabel")}
-              source="comment"
-              loading={false}
-              onWordClick={handleWordClick}
-            />
-          </div>
+          <Column
+            label={t("sentiment.distribution")}
+            action={
+              <ToggleGroup
+                value={[source]}
+                onValueChange={(vals: string[]) => vals.length && setSource(vals[0])}
+                variant="outline"
+              >
+                {sources.map((s) => (
+                  <ToggleGroupItem key={s.key} value={s.key} size="sm">
+                    {s.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            }
+          >
+            <div className="grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+              <SentimentRule
+                dist={current.dist}
+                source={current.key}
+                onSegmentClick={segmentHandler}
+              />
+              {/* 這份詞表與「詞表」一節排的是同一批詞：它必須自己說出
+                  差別在哪 —— 字級是次數，墨色是情感。 */}
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <h4 className="column-label font-sans">{t("sentiment.wordsLabel")}</h4>
+                  <ToneKey variant="ink" />
+                </div>
+                <WordTable
+                  words={toWordItems(current.words)}
+                  loading={false}
+                  onWordClick={wordHandler(current.key)}
+                  limit={64}
+                  showTone
+                  minHeight={160}
+                />
+              </div>
+            </div>
+          </Column>
 
           {isQuery && trend.length > 0 && (
-            <SentimentTrendChart data={trend} />
+            <Column label={t("sentiment.trend")}>
+              <SentimentTrendChart data={trend} />
+            </Column>
           )}
 
           {demographics.length > 0 && (
-            <DemographicSentimentMatrix data={demographics} onCellClick={handleCellClick} />
+            <SentimentMatrix data={demographics} onCellClick={cellHandler} />
+          )}
+
+          {isQuery && (
+            <div className="flex justify-end border-t border-rule pt-3">
+              <Button size="sm" variant="ghost" onClick={handleTrigger} disabled={triggering}>
+                {t("sentiment.reanalyze")}
+              </Button>
+            </div>
           )}
         </>
       )}
@@ -296,7 +302,7 @@ export default function SentimentPanel({ queryId, bvid }: Props) {
         onOpenChange={setContextOpen}
         title={contextTitle}
         subtitle={contextSubtitle}
-        highlightWord={contextHighlightWord}
+        highlightWord={contextWord}
         fetchContexts={contextFetcher}
       />
     </div>

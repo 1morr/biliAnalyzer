@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { BookOpenIcon } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+import Marginalia from "@/components/proof/Marginalia";
+import { Inking, NoInk } from "@/components/proof/States";
+import { GAP, SEP, formatExact } from "@/lib/format";
+import { circleWord } from "@/lib/highlight";
 import type { WordDetailResponse, SnippetItem } from "@/types";
 
 type CountLabelMode = "occurrences" | "uniqueUsers";
@@ -22,14 +18,124 @@ interface WordDetailPanelProps {
   countLabelMode?: CountLabelMode;
 }
 
-function highlightWord(text: string, word: string) {
-  const parts = text.split(new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "g"));
-  return parts.map((part, i) =>
-    part === word ? (
-      <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">{part}</mark>
-    ) : (
-      <span key={i}>{part}</span>
-    ),
+/**
+ * The note's body mounts only while the margin is open and remounts per word,
+ * so its fetch runs once on mount rather than resetting state inside an effect.
+ */
+function NoteBody({
+  word,
+  fetchDetail,
+  showVideoBreakdown,
+  countLabelMode,
+  onMeta,
+}: {
+  word: string;
+  fetchDetail: (word: string) => Promise<WordDetailResponse>;
+  showVideoBreakdown: boolean;
+  countLabelMode: CountLabelMode;
+  onMeta: (meta: string | undefined) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const [data, setData] = useState<WordDetailResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchDetail(word)
+      .then((d) => {
+        if (!active) return;
+        setData(d);
+        const countKey =
+          countLabelMode === "uniqueUsers"
+            ? "chart.wordcloud.uniqueUsers"
+            : "chart.wordcloud.occurrences";
+        onMeta(
+          [
+            t(countKey, { count: d.total_count }),
+            showVideoBreakdown && d.videos.length > 0
+              ? t("chart.wordcloud.inVideos", { count: d.videos.length })
+              : null,
+          ]
+            .filter(Boolean)
+            .join(SEP),
+        );
+      })
+      .catch(() => {
+        if (active) setError(t("common.error"));
+      });
+    return () => {
+      active = false;
+    };
+  }, [word, fetchDetail, t, countLabelMode, showVideoBreakdown, onMeta]);
+
+  if (error) return <p className="py-6 text-center text-note text-mark">{error}</p>;
+  if (!data) return <Inking />;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {showVideoBreakdown && data.videos.length > 1 && (
+        <section>
+          <h4 className="column-label border-b border-rule-strong pb-1.5">
+            {t("chart.wordcloud.perVideo")}
+          </h4>
+          <ul>
+            {data.videos.map((v) => (
+              <li
+                key={v.bvid}
+                className="flex items-baseline justify-between gap-3 border-b border-rule py-1.5"
+              >
+                <Link
+                  to={`/video/${v.bvid}`}
+                  className="min-w-0 flex-1 truncate text-note text-ink"
+                  title={v.title}
+                >
+                  {v.title}
+                </Link>
+                <span className="shrink-0 text-note tabular-nums text-ink-3">{v.count}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {data.videos.some((v) => v.snippets.length > 0) && (
+        <section>
+          <h4 className="column-label border-b border-rule-strong pb-1.5">
+            {t("chart.wordcloud.contexts")}
+          </h4>
+          <ul>
+            {data.videos.flatMap((v) =>
+              v.snippets.map((snippet: SnippetItem, i: number) => (
+                <li key={`${v.bvid}-${i}`} className="border-b border-rule py-2.5">
+                  <p className="text-body leading-[1.75] text-ink">
+                    {circleWord(snippet.text, word)}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-baseline gap-x-2.5 text-colophon text-ink-3">
+                    {snippet.user && <span>@{snippet.user}</span>}
+                    {snippet.source && (
+                      <span className="tracking-[0.1em] uppercase">
+                        {t(`chart.wordcloud.source.${snippet.source}`)}
+                      </span>
+                    )}
+                    {showVideoBreakdown && data.videos.length > 1 && (
+                      <span className="min-w-0 truncate">{v.title}</span>
+                    )}
+                  </p>
+                </li>
+              )),
+            )}
+          </ul>
+        </section>
+      )}
+
+      {data.total_count === 0 && <NoInk />}
+
+      <p className="colophon">
+        {t("chart.wordcloud.frequency")}
+        {GAP}
+        {formatExact(data.total_count, i18n.language)}
+      </p>
+    </div>
   );
 }
 
@@ -42,127 +148,28 @@ export default function WordDetailPanel({
   countLabelMode = "occurrences",
 }: WordDetailPanelProps) {
   const { t } = useTranslation();
-  const countLabelKey = countLabelMode === "uniqueUsers" ? "chart.wordcloud.uniqueUsers" : "chart.wordcloud.occurrences";
-  const [data, setData] = useState<WordDetailResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !word) return;
-    let active = true;
-    setLoading(true);
-    setError(null);
-    setData(null);
-
-    fetchDetail(word)
-      .then((d) => { if (active) setData(d); })
-      .catch((e) => { if (active) setError(e?.message || t("common.error")); })
-      .finally(() => { if (active) setLoading(false); });
-
-    return () => { active = false; };
-  }, [open, word, fetchDetail, t]);
+  const [meta, setMeta] = useState<string | undefined>();
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex flex-col w-[400px] sm:max-w-[400px] p-0"
-        showCloseButton={true}
-      >
-        <SheetHeader className="border-b border-border px-4 py-3 shrink-0">
-          <div className="flex items-center gap-2 pr-8">
-            <BookOpenIcon className="size-5 text-blue-500" />
-            <SheetTitle className="text-base">
-              {word || t("chart.wordcloud.detail")}
-            </SheetTitle>
-          </div>
-          {data && (
-            <SheetDescription className="text-xs">
-              {t(countLabelKey, { count: data.total_count })}
-              {showVideoBreakdown && data.videos.length > 0 && (
-                <> · {t("chart.wordcloud.inVideos", { count: data.videos.length })}</>
-              )}
-            </SheetDescription>
-          )}
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto px-4 py-3 text-sm">
-          {loading ? (
-            <p className="text-muted-foreground animate-pulse">{t("common.loading")}</p>
-          ) : error ? (
-            <p className="text-red-500">{error}</p>
-          ) : data ? (
-            <div className="flex flex-col gap-4">
-              {/* Per-video breakdown */}
-              {showVideoBreakdown && data.videos.length > 1 && (
-                <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    {t("chart.wordcloud.perVideo")}
-                  </h3>
-                  <ul className="space-y-1.5">
-                    {data.videos.map((v) => (
-                      <li key={v.bvid} className="flex items-center justify-between gap-2">
-                        <Link
-                          to={`/video/${v.bvid}`}
-                          className="text-sm text-foreground hover:text-blue-500 truncate flex-1"
-                          title={v.title}
-                        >
-                          {v.title}
-                        </Link>
-                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          {v.count}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* Context snippets */}
-              {data.videos.some((v) => v.snippets.length > 0) && (
-                <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    {t("chart.wordcloud.contexts")}
-                  </h3>
-                  <ul className="space-y-2">
-                    {data.videos.flatMap((v) =>
-                      v.snippets.map((snippet: SnippetItem, i: number) => (
-                        <li
-                          key={`${v.bvid}-${i}`}
-                          className="rounded-md bg-muted/50 px-3 py-2 text-xs leading-relaxed text-foreground"
-                        >
-                          {highlightWord(snippet.text, word!)}
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                            {snippet.user && (
-                              <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
-                                @{snippet.user}
-                              </span>
-                            )}
-                            {snippet.source && (
-                              <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
-                                {t(`chart.wordcloud.source.${snippet.source}`)}
-                              </span>
-                            )}
-                            {showVideoBreakdown && data.videos.length > 1 && (
-                              <span className="text-[10px] text-muted-foreground truncate">
-                                — {v.title}
-                              </span>
-                            )}
-                          </div>
-                        </li>
-                      )),
-                    )}
-                  </ul>
-                </section>
-              )}
-
-              {data.total_count === 0 && (
-                <p className="text-muted-foreground text-xs">{t("common.noData")}</p>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <Marginalia
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setMeta(undefined);
+        onOpenChange(next);
+      }}
+      subject={word || t("chart.wordcloud.detail")}
+      meta={meta}
+    >
+      {open && word && (
+        <NoteBody
+          key={word}
+          word={word}
+          fetchDetail={fetchDetail}
+          showVideoBreakdown={showVideoBreakdown}
+          countLabelMode={countLabelMode}
+          onMeta={setMeta}
+        />
+      )}
+    </Marginalia>
   );
 }

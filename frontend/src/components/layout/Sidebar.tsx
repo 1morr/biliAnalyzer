@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { SettingsIcon, Trash2Icon } from "lucide-react";
+import { SettingsIcon, SunIcon, MoonIcon, LaptopIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,19 +14,29 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { formatCount } from "@/lib/format";
+import { useTheme } from "@/hooks/useTheme";
+import { CircleMark, DeleteMark } from "@/components/proof/marks";
 import type { QuerySummary } from "@/types";
 import NewQueryDialog from "@/components/dashboard/NewQueryDialog";
 
-export default function Sidebar() {
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
+const THEME_ORDER = ["light", "dark", "system"] as const;
+
+export default function Sidebar({ onNavigate }: SidebarProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { queryId } = useParams<{ queryId?: string }>();
+  const { theme, setTheme } = useTheme();
 
   const [queries, setQueries] = useState<QuerySummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<QuerySummary | null>(null);
 
-  // Poll queries every 3 seconds to update status during fetching
   useEffect(() => {
     let active = true;
 
@@ -35,7 +45,9 @@ export default function Sidebar() {
         const data = await api.getQueries();
         if (active) setQueries(data);
       } catch {
-        // ignore errors silently
+        // The index keeps its last good state; the sheet says nothing it cannot prove.
+      } finally {
+        if (active) setLoaded(true);
       }
     }
 
@@ -48,14 +60,19 @@ export default function Sidebar() {
   }, []);
 
   function toggleLanguage() {
-    const next = i18n.language === "zh" ? "en" : "zh";
+    const next = i18n.language.startsWith("zh") ? "en" : "zh";
     i18n.changeLanguage(next);
     localStorage.setItem("lang", next);
   }
 
-  function formatViews(views: number): string {
-    if (views >= 10000) return `${(views / 10000).toFixed(1)}w`;
-    return String(views);
+  function cycleTheme() {
+    const i = THEME_ORDER.indexOf(theme as (typeof THEME_ORDER)[number]);
+    setTheme(THEME_ORDER[(i + 1) % THEME_ORDER.length]);
+  }
+
+  function go(to: string) {
+    navigate(to);
+    onNavigate?.();
   }
 
   async function handleDelete() {
@@ -64,105 +81,93 @@ export default function Sidebar() {
     try {
       await api.deleteQuery(deletedId);
       setQueries((prev) => prev.filter((q) => q.id !== deletedId));
-      if (queryId === String(deletedId)) {
-        navigate("/dashboard");
-      }
+      if (queryId === String(deletedId)) navigate("/dashboard");
     } catch {
-      // ignore
+      // Deletion failed; the next poll restores the true list.
     } finally {
       setDeleteTarget(null);
     }
   }
 
+  const ThemeIcon = theme === "dark" ? MoonIcon : theme === "light" ? SunIcon : LaptopIcon;
+
   return (
     <>
-      <aside className="flex h-full w-[220px] shrink-0 flex-col bg-slate-50 dark:bg-slate-900 border-r border-border">
-        {/* Header */}
-        <div className="flex h-12 items-center px-4 shrink-0">
-          <span
-            className="text-[15px] font-bold text-foreground select-none"
-            style={{ fontSize: "15px" }}
-          >
+      <aside className="flex h-full flex-col bg-paper-2">
+        {/* 刊頭 —— 與報頭同高（--head-h），兩條頭線接成橫貫整張紙的一條。 */}
+        <div className="flex h-[var(--head-h)] shrink-0 flex-col justify-center border-b-2 border-rule-strong px-4">
+          <p className="font-song text-h3 leading-none font-semibold tracking-tight text-ink">
             {t("app.title")}
-          </span>
+          </p>
+          <p className="colophon mt-1.5">{t("app.tagline")}</p>
         </div>
 
-        {/* New Query button */}
-        <div className="px-3 pb-3 shrink-0">
-          <Button
-            className="w-full rounded-lg bg-blue-500 hover:bg-blue-600 text-white border-0 text-sm font-medium"
-            onClick={() => setDialogOpen(true)}
-          >
+        <div className="px-4 py-3">
+          <Button variant="default" size="lg" className="w-full" onClick={() => setDialogOpen(true)}>
             {t("app.newQuery")}
           </Button>
         </div>
 
-        {/* Query History section */}
-        <div className="flex flex-col flex-1 min-h-0 px-3">
-          <p
-            className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0"
-            style={{ fontSize: "10px" }}
-          >
-            {t("sidebar.queryHistory")}
-          </p>
+        {/* 稿件目錄 */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="column-label px-4 pb-1.5">{t("sidebar.queryHistory")}</p>
 
-          <ScrollArea className="flex-1">
-            <div className="flex flex-col gap-1.5 pb-2">
-              {queries.length === 0 && (
-                <p className="text-[11px] text-muted-foreground py-2 text-center">
-                  {t("common.noData")}
-                </p>
+          <ScrollArea className="min-h-0 flex-1">
+            <ul className="border-t border-rule">
+              {loaded && queries.length === 0 && (
+                <li className="px-4 py-4 text-note leading-relaxed text-ink-3">
+                  {t("sidebar.emptyIndex")}
+                </li>
               )}
               {queries.map((q) => {
                 const isActive = queryId === String(q.id);
+                const busy = q.status === "fetching" || q.status === "fetching_content";
                 return (
-                  <div key={q.id} className="group relative">
+                  <li
+                    key={q.id}
+                    className={cn(
+                      "group relative border-b border-rule transition-colors",
+                      isActive ? "bg-paper" : "hover:bg-paper-2",
+                    )}
+                  >
+                    {isActive && (
+                      <CircleMark className="pointer-events-none absolute top-3 left-1.5 size-3.5 text-mark" />
+                    )}
                     <button
                       type="button"
-                      onClick={() => navigate(`/dashboard/${q.id}`)}
-                      className={cn(
-                        "w-full rounded-lg border p-2 pr-7 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-800",
-                        isActive
-                          ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                          : "border border-border"
-                      )}
+                      onClick={() => go(`/dashboard/${q.id}`)}
+                      className="w-full py-2.5 pr-8 pl-6 text-left outline-none focus-visible:bg-paper-2"
+                      aria-current={isActive ? "true" : undefined}
                     >
-                    <p
-                      className="font-semibold text-foreground truncate"
-                      style={{ fontSize: "12px" }}
-                    >
-                      UID: {q.uid}
-                    </p>
-                    <p
-                      className="text-muted-foreground truncate"
-                      style={{ fontSize: "10px" }}
-                    >
-                      {q.start_date} → {q.end_date}
-                    </p>
-                    <p
-                      className="text-muted-foreground"
-                      style={{ fontSize: "10px" }}
-                    >
-                      {q.video_count} {t("sidebar.videos")} ·{" "}
-                      {formatViews(q.total_views)} {t("sidebar.views")}
-                    </p>
-                    {q.status !== "done" && (
                       <p
                         className={cn(
-                          "mt-0.5 text-[10px] font-medium",
-                          q.status === "fetching"
-                            ? "text-blue-500"
-                            : q.status === "error"
-                              ? "text-red-500"
-                              : "text-muted-foreground"
+                          "truncate font-song text-ui leading-snug font-semibold",
+                          isActive ? "text-mark" : "text-ink",
                         )}
-                        style={{ fontSize: "10px" }}
                       >
-                        {q.status === "fetching"
-                          ? q.progress ?? t("common.loading")
-                          : q.status}
+                        {q.user_name || `UID ${q.uid}`}
                       </p>
-                    )}
+                      <p className="mt-0.5 truncate text-note tabular-nums text-ink-3">
+                        {q.start_date} — {q.end_date}
+                      </p>
+                      <p className="text-note tabular-nums text-ink-3">
+                        {t("sidebar.summary", {
+                          videos: q.video_count,
+                          views: formatCount(q.total_views, i18n.language),
+                        })}
+                      </p>
+                      {q.status !== "done" && (
+                        <p
+                          className={cn(
+                            "mt-1 truncate text-note",
+                            busy ? "text-pencil" : "text-mark",
+                          )}
+                        >
+                          {busy
+                            ? (q.progress ?? t("press.running"))
+                            : t(`press.status.${q.status}`, { defaultValue: q.status })}
+                        </p>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -170,66 +175,66 @@ export default function Sidebar() {
                         e.stopPropagation();
                         setDeleteTarget(q);
                       }}
-                      className="absolute top-2 right-1.5 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                      className="absolute top-2.5 right-2 p-1 text-ink-3 opacity-0 transition-opacity hover:text-mark focus-visible:opacity-100 group-hover:opacity-100"
                       aria-label={t("sidebar.deleteQuery")}
                     >
-                      <Trash2Icon className="size-3.5" />
+                      <DeleteMark className="size-4" />
                     </button>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           </ScrollArea>
         </div>
 
-        {/* Footer: settings + language toggle */}
-        <div className="flex items-center justify-between px-3 py-2 shrink-0 border-t border-border">
+        {/* 版邊控制 */}
+        <div className="flex items-center gap-1 border-t border-rule-strong px-3 py-2">
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => navigate("/settings")}
-            aria-label="Settings"
+            onClick={() => go("/settings")}
+            aria-label={t("settings.title")}
           >
-            <SettingsIcon className="size-4" />
+            <SettingsIcon />
           </Button>
-
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="rounded px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={cycleTheme}
+            aria-label={t(`theme.${theme}`)}
+            title={t(`theme.${theme}`)}
           >
-            {i18n.language === "zh" ? "EN" : "中"}
-          </button>
+            <ThemeIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto tracking-[0.14em]"
+            onClick={toggleLanguage}
+          >
+            {i18n.language.startsWith("zh") ? "EN" : "中"}
+          </Button>
         </div>
       </aside>
 
-      {/* New Query Dialog */}
-      <NewQueryDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onFetchStarted={() => {
-          // Queries will refresh via polling
-        }}
-      />
+      <NewQueryDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("sidebar.deleteConfirmTitle")}</DialogTitle>
             <DialogDescription>
-              {t("sidebar.deleteConfirmDesc", { uid: deleteTarget?.uid })}
+              {t("sidebar.deleteConfirmDesc", {
+                name: deleteTarget?.user_name || `UID ${deleteTarget?.uid}`,
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               {t("common.cancel")}
             </Button>
-            <Button
-              className="bg-red-500 hover:bg-red-600 text-white"
-              onClick={handleDelete}
-            >
-              {t("common.confirm")}
+            <Button variant="destructive" onClick={handleDelete}>
+              {t("sidebar.deleteQuery")}
             </Button>
           </DialogFooter>
         </DialogContent>

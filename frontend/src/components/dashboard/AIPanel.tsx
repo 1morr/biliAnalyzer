@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SparklesIcon, ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -49,31 +49,27 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
 
   const presets = bvid ? [...VIDEO_PRESETS, ...QUERY_PRESETS] : QUERY_PRESETS;
 
-  // Load conversation list
   const loadConversations = useCallback(async () => {
     try {
       const convs = bvid
         ? await api.getVideoAIConversations(bvid)
-        : queryId ? await api.getAIConversations(queryId) : [];
+        : queryId
+          ? await api.getAIConversations(queryId)
+          : [];
       setConversations(convs);
     } catch {
-      // silently fail
+      // The list keeps its last good state.
     }
   }, [queryId, bvid]);
 
   useEffect(() => {
-    if (open) {
-      loadConversations();
-    }
+    if (!open) return;
+    // The list is loaded on open; its setState runs inside the async callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadConversations();
+    // Closing aborts any stream in flight; panel state survives the animation.
+    return () => abortRef.current?.abort();
   }, [open, loadConversations]);
-
-  // Reset when panel closes
-  useEffect(() => {
-    if (!open) {
-      abortRef.current?.abort();
-      // Don't reset state immediately — let the panel animate out
-    }
-  }, [open]);
 
   function goBack() {
     abortRef.current?.abort();
@@ -299,26 +295,24 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex flex-col w-[560px] sm:max-w-[560px] p-0"
-        showCloseButton={false}
+        className="flex w-full flex-col p-0 sm:w-[min(38rem,92vw)] sm:max-w-[min(38rem,92vw)]"
       >
-        <SheetHeader className="border-b border-border px-4 py-3 shrink-0">
-          <div className="flex items-center gap-2 pr-8">
+        <SheetHeader className="pr-10">
+          <div className="flex items-center gap-2">
             {state !== "presets" && (
-              <Button variant="ghost" size="icon" className="size-6" onClick={goBack}>
-                <ArrowLeftIcon className="size-4" />
+              <Button variant="ghost" size="icon-xs" onClick={goBack} aria-label={t("ai.backToPresets")}>
+                <ArrowLeftIcon />
               </Button>
             )}
-            <SparklesIcon className="size-5 text-purple-500" />
-            <SheetTitle className="text-base">{t("ai.title")}</SheetTitle>
+            <SheetTitle>{t("ai.title")}</SheetTitle>
           </div>
-          <SheetDescription className="text-xs">
-            {bvid ? `Video: ${bvid}` : queryId ? `Query #${queryId}` : ""}
+          <SheetDescription>
+            {bvid ? bvid : queryId ? `${t("colophon.query")} #${queryId}` : ""}
           </SheetDescription>
         </SheetHeader>
 
         {/* Body */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
           {state === "presets" && (
             <AIPresetSelector
               presets={presets}
@@ -340,8 +334,8 @@ export default function AIPanel({ queryId, bvid, open, onOpenChange }: AIPanelPr
           )}
 
           {state === "error" && (
-            <div className="flex flex-col items-center justify-center gap-3 p-6">
-              <p className="text-sm text-red-500">{error}</p>
+            <div className="flex flex-col items-start gap-3 px-4 py-6">
+              <p className="text-note leading-relaxed text-mark">{error}</p>
               <Button variant="outline" size="sm" onClick={goBack}>
                 {t("ai.backToPresets")}
               </Button>

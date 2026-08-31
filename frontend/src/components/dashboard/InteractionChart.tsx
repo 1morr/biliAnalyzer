@@ -1,101 +1,78 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { chartBase, categoryAxis, valueAxis, useChartTokens } from "@/lib/chart-theme";
+import { formatExact } from "@/lib/format";
+import { Inking, NoInk } from "@/components/proof/States";
 import type { InteractionData } from "@/types";
 
-interface InteractionChartProps {
+/**
+ * 互動對比 —— four ordered actions, four steps of one ink ramp. They share a
+ * unit and a scale, so hue would only add noise; pointing at one marks it.
+ */
+export default function InteractionChart({
+  queryId,
+  height = 236,
+}: {
   queryId: number;
-  totalViews?: number;
-}
-
-export default function InteractionChart({ queryId, totalViews }: InteractionChartProps) {
-  const { t } = useTranslation();
+  height?: number;
+}) {
+  const { t, i18n } = useTranslation();
+  const k = useChartTokens();
   const [data, setData] = useState<InteractionData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    api.getInteraction(queryId)
+    api
+      .getInteraction(queryId)
       .then((d) => { if (active) setData(d); })
-      .catch(() => {})
+      .catch(() => { if (active) setData(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [queryId]);
 
-  const isDark = document.documentElement.classList.contains("dark");
-
-  const categories = [
-    t("stats.likes"),
-    t("stats.coins"),
-    t("stats.favorites"),
-    t("stats.shares"),
-  ];
-  const colors = ["#ef4444", "#f59e0b", "#a855f7", "#06b6d4"];
-  const values = data ? [data.likes, data.coins, data.favorites, data.shares] : [];
-
-  const avgInteractionRate =
-    data && totalViews && totalViews > 0
-      ? ((data.likes + data.coins + data.favorites + data.shares) / totalViews * 100).toFixed(2)
-      : null;
-
-  const option = {
-    backgroundColor: "transparent",
-    tooltip: { trigger: "axis" },
-    xAxis: {
-      type: "category",
-      data: categories,
-      axisLabel: { color: isDark ? "#9ca3af" : "#6b7280", fontSize: 11 },
-      axisLine: { lineStyle: { color: isDark ? "#374151" : "#e5e7eb" } },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        color: isDark ? "#9ca3af" : "#6b7280",
-        fontSize: 11,
-        formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v),
-      },
-      splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
-    },
-    series: [
-      {
-        name: t("chart.interaction"),
-        type: "bar",
-        data: values.map((v, i) => ({ value: v, itemStyle: { color: colors[i] } })),
-        barMaxWidth: 60,
-      },
-    ],
-    grid: { left: 50, right: 16, top: 16, bottom: 40 },
-  };
-
-  if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        {t("common.loading")}
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        {t("common.noData")}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{t("chart.interaction")}</p>
-        {avgInteractionRate && (
-          <span className="text-xs text-muted-foreground">
-            {t("stats.interactionRate")}: <span className="font-semibold text-foreground">{avgInteractionRate}%</span>
-          </span>
-        )}
-      </div>
-      <ReactECharts option={option} style={{ height: 220 }} />
-    </div>
+  const rows = useMemo(
+    () =>
+      data
+        ? [
+            { key: "likes", label: t("stats.likes"), value: data.likes },
+            { key: "coins", label: t("stats.coins"), value: data.coins },
+            { key: "favorites", label: t("stats.favorites"), value: data.favorites },
+            { key: "shares", label: t("stats.shares"), value: data.shares },
+          ]
+        : [],
+    [data, t],
   );
+
+  const option = useMemo(
+    () => ({
+      ...chartBase(k),
+      tooltip: {
+        ...chartBase(k).tooltip,
+        trigger: "axis",
+        axisPointer: { type: "shadow", shadowStyle: { color: k.mark, opacity: 0.06 } },
+        valueFormatter: (v: number) => formatExact(v, i18n.language),
+      },
+      grid: { left: 4, right: 12, top: 18, bottom: 4, containLabel: true },
+      xAxis: categoryAxis(k, { data: rows.map((r) => r.label) }),
+      yAxis: valueAxis(k),
+      series: [
+        {
+          name: t("chart.interaction"),
+          type: "bar",
+          barMaxWidth: 44,
+          data: rows.map((r, i) => ({ value: r.value, itemStyle: { color: k.seq[i] } })),
+          emphasis: { itemStyle: { color: k.mark } },
+        },
+      ],
+    }),
+    [rows, k, t, i18n.language],
+  );
+
+  if (loading) return <Inking className="py-16" />;
+  if (!data) return <NoInk className="py-16" />;
+
+  return <ReactECharts option={option} style={{ height }} notMerge lazyUpdate />;
 }

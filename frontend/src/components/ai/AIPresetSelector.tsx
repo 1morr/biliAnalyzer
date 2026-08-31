@@ -1,13 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { BarChart3Icon, LightbulbIcon, VideoIcon, MessageSquareIcon, MessageCircleIcon, Trash2Icon } from "lucide-react";
+import { SEP } from "@/lib/format";
+import { DeleteMark } from "@/components/proof/marks";
 import type { AIPreset, AIConversation } from "@/types";
-
-const PRESET_ICONS: Record<string, typeof BarChart3Icon> = {
-  overall_analysis: BarChart3Icon,
-  topic_inspiration: LightbulbIcon,
-  video_analysis: VideoIcon,
-  free_chat: MessageCircleIcon,
-};
 
 interface AIPresetSelectorProps {
   presets: AIPreset[];
@@ -17,71 +11,78 @@ interface AIPresetSelectorProps {
   onDelete: (convId: number) => void;
 }
 
+/** 選題單 —— what to ask the editor for, and the notes already on file. */
 export default function AIPresetSelector({
-  presets, conversations, onSelect, onResume, onDelete,
+  presets,
+  conversations,
+  onSelect,
+  onResume,
+  onDelete,
 }: AIPresetSelectorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {/* Preset cards */}
-      <div className="text-sm font-medium text-muted-foreground">{t("ai.newAnalysis")}</div>
-      <div className="grid gap-2">
-        {presets.map((preset) => {
-          const Icon = PRESET_ICONS[preset.id] || BarChart3Icon;
-          return (
-            <button
-              key={preset.id}
-              onClick={() => onSelect(preset.id)}
-              className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent"
-            >
-              <Icon className="mt-0.5 size-4 shrink-0 text-purple-500" />
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{t(preset.labelKey)}</div>
-                <div className="text-xs text-muted-foreground">{t(preset.descriptionKey)}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Conversation history */}
-      {conversations.length > 0 && (
-        <>
-          <div className="text-sm font-medium text-muted-foreground mt-2">{t("ai.conversations")}</div>
-          <div className="flex flex-col gap-1">
-            {conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent cursor-pointer"
+    <div className="flex flex-col gap-7 px-4 py-4">
+      <section>
+        <h4 className="column-label border-b border-rule-strong pb-1.5">{t("ai.newAnalysis")}</h4>
+        <ul>
+          {presets.map((preset) => (
+            <li key={preset.id} className="border-b border-rule">
+              <button
+                type="button"
+                onClick={() => onSelect(preset.id)}
+                className="group w-full py-2.5 text-left outline-none hover:bg-paper-2 focus-visible:bg-paper-2"
               >
-                <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                <button
-                  onClick={() => onResume(conv.id)}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <div className="text-sm truncate">{conv.title || `#${conv.id}`}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(conv.created_at).toLocaleDateString()} · {conv.message_count} msgs
-                  </div>
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                >
-                  <Trash2Icon className="size-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+                <p className="font-song text-ui font-semibold text-ink group-hover:text-mark">
+                  {t(preset.labelKey)}
+                </p>
+                <p className="mt-0.5 text-note leading-relaxed text-ink-2">
+                  {t(preset.descriptionKey)}
+                </p>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      {conversations.length === 0 && (
-        <div className="text-xs text-muted-foreground text-center py-2">
-          {t("ai.noConversations")}
-        </div>
-      )}
+      <section>
+        <h4 className="column-label border-b border-rule-strong pb-1.5">{t("ai.conversations")}</h4>
+        {conversations.length === 0 ? (
+          <p className="py-3 text-note text-ink-3">{t("ai.noConversations")}</p>
+        ) : (
+          <ul>
+            {conversations.map((conv) => (
+              <li key={conv.id} className="group relative border-b border-rule">
+                <button
+                  type="button"
+                  onClick={() => onResume(conv.id)}
+                  className="w-full py-2 pr-8 text-left outline-none hover:bg-paper-2 focus-visible:bg-paper-2"
+                >
+                  <p className="truncate text-ui text-ink">{conv.title || `#${conv.id}`}</p>
+                  <p className="mt-0.5 text-colophon tabular-nums text-ink-3">
+                    {new Date(conv.created_at).toLocaleDateString(
+                      i18n.language.startsWith("zh") ? "zh-CN" : "en-US",
+                    )}
+                    {SEP}
+                    {t("ai.messageCount", { n: conv.message_count })}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(conv.id);
+                  }}
+                  className="absolute top-2 right-1 p-1 text-ink-3 opacity-0 transition-opacity hover:text-mark focus-visible:opacity-100 group-hover:opacity-100"
+                  aria-label={t("ai.deleteConversation")}
+                >
+                  <DeleteMark className="size-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

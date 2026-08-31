@@ -10,3 +10,9 @@ __pycache__/
 .secret_key
 .playwright-mcp/
 *.png
+
+# Impeccable working state (the direction record in .impeccable/build stays)
+.impeccable/questions/
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/hook.cache.json

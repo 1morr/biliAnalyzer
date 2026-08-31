@@ -1,96 +1,111 @@
-import { useState } from "react";
+import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTranslation } from "react-i18next";
+import { chartBase, valueAxis, useChartTokens, NAME_SIZE } from "@/lib/chart-theme";
+import { GAP, formatExact, formatPercent } from "@/lib/format";
+import { NoInk } from "@/components/proof/States";
 import type { VideoSummary } from "@/types";
 
-interface ScatterChartProps {
+/**
+ * 播放量 vs 互動率 —— the blue-pencil line is the system's own note: the mean
+ * interaction rate, so every dot reads as above or below it at a glance.
+ */
+export default function ScatterChart({
+  videos,
+  height = 236,
+  onVideoClick,
+}: {
   videos: VideoSummary[];
-}
+  height?: number;
+  onVideoClick?: (bvid: string) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const k = useChartTokens();
 
-export default function ScatterChart({ videos }: ScatterChartProps) {
-  const { t } = useTranslation();
-  const [showTip, setShowTip] = useState(false);
+  const meanRate = useMemo(() => {
+    if (!videos.length) return null;
+    return videos.reduce((s, v) => s + v.stats.interaction_rate, 0) / videos.length;
+  }, [videos]);
 
-  const isDark = document.documentElement.classList.contains("dark");
-
-  const scatterData = videos.map((v) => ({
-    value: [v.stats.views, v.stats.interaction_rate],
-    name: v.title,
-  }));
-
-  const option = {
-    backgroundColor: "transparent",
-    tooltip: {
-      trigger: "item",
-      confine: true,
-      formatter: (params: { data: { name: string; value: number[] } }) => {
-        const d = params.data;
-        return `${d.name}<br/>Views: ${d.value[0].toLocaleString()}<br/>IR: ${d.value[1].toFixed(2)}%`;
+  const option = useMemo(
+    () => ({
+      ...chartBase(k),
+      tooltip: {
+        ...chartBase(k).tooltip,
+        trigger: "item",
+        confine: true,
+        formatter: (p: { data: { name: string; value: number[] } }) =>
+          `${p.data.name}<br/>${t("stats.totalViews")}${GAP}${formatExact(p.data.value[0], i18n.language)}` +
+          `<br/>${t("stats.interactionRate")}${GAP}${formatPercent(p.data.value[1])}`,
       },
-    },
-    xAxis: {
-      type: "value",
-      name: t("stats.totalViews"),
-      nameLocation: "middle",
-      nameGap: 28,
-      axisLabel: {
-        color: isDark ? "#9ca3af" : "#6b7280",
-        fontSize: 11,
-        formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v),
-      },
-      splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
-    },
-    yAxis: {
-      type: "value",
-      name: t("stats.interactionRate"),
-      nameLocation: "middle",
-      nameGap: 40,
-      axisLabel: {
-        color: isDark ? "#9ca3af" : "#6b7280",
-        fontSize: 11,
-        formatter: (v: number) => `${v.toFixed(1)}%`,
-      },
-      splitLine: { lineStyle: { color: isDark ? "#1f2937" : "#f3f4f6" } },
-    },
-    series: [
-      {
-        type: "scatter",
-        data: scatterData,
-        symbolSize: 8,
-        itemStyle: { color: "#6366f1", opacity: 0.7 },
-      },
-    ],
-    grid: { left: 60, right: 20, top: 20, bottom: 50 },
-  };
+      grid: { left: 4, right: 14, top: 18, bottom: 22, containLabel: true },
+      xAxis: valueAxis(k, {
+        name: t("stats.totalViews"),
+        nameLocation: "middle",
+        nameGap: 26,
+        nameTextStyle: { color: k.ink3, fontSize: NAME_SIZE, fontFamily: k.font },
+        splitLine: { show: false },
+      }),
+      yAxis: valueAxis(k, {
+        axisLabel: {
+          color: k.ink3,
+          fontSize: 10,
+          fontFamily: k.font,
+          formatter: (v: number) => `${v.toFixed(1)}%`,
+        },
+      }),
+      series: [
+        {
+          type: "scatter",
+          data: videos.map((v) => ({
+            value: [v.stats.views, v.stats.interaction_rate],
+            name: v.title,
+            bvid: v.bvid,
+          })),
+          symbolSize: 7,
+          itemStyle: { color: k.ink, opacity: 0.6 },
+          emphasis: { itemStyle: { color: k.mark, opacity: 1 } },
+          markLine:
+            meanRate !== null
+              ? {
+                  silent: true,
+                  symbol: "none",
+                  lineStyle: { color: k.pencil, width: 1, type: "dashed" },
+                  label: {
+                    formatter: `${t("stats.avgInteraction")} ${formatPercent(meanRate, 2)}`,
+                    color: k.pencil,
+                    fontSize: 10,
+                    fontFamily: k.font,
+                    position: "insideEndTop",
+                  },
+                  data: [{ yAxis: meanRate }],
+                }
+              : undefined,
+        },
+      ],
+    }),
+    [videos, meanRate, k, t, i18n.language],
+  );
 
-  if (videos.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        {t("common.noData")}
-      </div>
-    );
-  }
+  if (!videos.length) return <NoInk className="py-16" />;
 
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-1.5">
-        <p className="text-sm font-medium text-foreground">{t("chart.scatter")}</p>
-        <div className="relative">
-          <span
-            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground"
-            onMouseEnter={() => setShowTip(true)}
-            onMouseLeave={() => setShowTip(false)}
-          >
-            ?
-          </span>
-          {showTip && (
-            <div className="absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md border">
-              {t("chart.scatterFormula")}
-            </div>
-          )}
-        </div>
-      </div>
-      <ReactECharts option={option} style={{ height: 220 }} />
+    <div className={onVideoClick ? "cursor-pointer" : undefined}>
+      <ReactECharts
+        option={option}
+        style={{ height }}
+        notMerge
+        lazyUpdate
+        onEvents={
+          onVideoClick
+            ? {
+                click: (params: { data?: { bvid?: string } }) => {
+                  if (params.data?.bvid) onVideoClick(params.data.bvid);
+                },
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

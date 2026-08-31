@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -10,228 +11,207 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MissingColumn } from "@/components/proof/States";
+import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
 interface NewQueryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFetchStarted: () => void;
 }
 
 type Preset = "7d" | "30d" | "3m" | "6m" | "1y" | "all";
 
-function getPresetDates(preset: Preset): { start: string; end: string } {
+const PRESETS: Preset[] = ["7d", "30d", "3m", "6m", "1y", "all"];
+
+function presetDates(preset: Preset): { start: string; end: string } {
   const end = new Date();
   const start = new Date();
   const fmt = (d: Date) => d.toISOString().split("T")[0];
 
   switch (preset) {
-    case "7d":
-      start.setDate(end.getDate() - 7);
-      break;
-    case "30d":
-      start.setDate(end.getDate() - 30);
-      break;
-    case "3m":
-      start.setMonth(end.getMonth() - 3);
-      break;
-    case "6m":
-      start.setMonth(end.getMonth() - 6);
-      break;
-    case "1y":
-      start.setFullYear(end.getFullYear() - 1);
-      break;
-    case "all":
-      start.setFullYear(2009, 6, 7); // Bilibili founding date
-      break;
+    case "7d": start.setDate(end.getDate() - 7); break;
+    case "30d": start.setDate(end.getDate() - 30); break;
+    case "3m": start.setMonth(end.getMonth() - 3); break;
+    case "6m": start.setMonth(end.getMonth() - 6); break;
+    case "1y": start.setFullYear(end.getFullYear() - 1); break;
+    case "all": start.setFullYear(2009, 5, 26); break; // Bilibili 建站
   }
-
   return { start: fmt(start), end: fmt(end) };
 }
 
-export default function NewQueryDialog({
-  open,
-  onOpenChange,
-  onFetchStarted,
-}: NewQueryDialogProps) {
+const dateFieldClass =
+  "h-8 w-full border border-rule-2 bg-transparent px-2.5 py-1 font-sans text-ui tabular-nums text-ink outline-none transition-colors focus-visible:border-mark focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-mark/40 max-sm:h-10";
+
+/** 發稿單 —— what to fetch, over which span, and whether the press can read the text. */
+export default function NewQueryDialog({ open, onOpenChange }: NewQueryDialogProps) {
   const { t } = useTranslation();
   const [uid, setUid] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
-  const [sessdataStatus, setSessdataStatus] = useState<"checking" | "valid" | "invalid" | "missing" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sessdata, setSessdata] = useState<"checking" | "valid" | "invalid" | "missing" | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open) return;
-
     let ignore = false;
 
-    async function checkSessdata() {
-      setSessdataStatus("checking");
+    (async () => {
+      setSessdata("checking");
       try {
         const settings = await api.getSettings();
-        if (!ignore) {
-          if (!settings.sessdata) {
-            setSessdataStatus("missing");
-            return;
-          }
-
-          // Test SESSDATA validity
-          const testResult = await api.testSessdata(settings.sessdata);
-          if (!ignore) {
-            setSessdataStatus(testResult.status === "ok" ? "valid" : "invalid");
-          }
-        }
+        if (ignore) return;
+        if (!settings.sessdata) return setSessdata("missing");
+        const test = await api.testSessdata(settings.sessdata);
+        if (!ignore) setSessdata(test.status === "ok" ? "valid" : "invalid");
       } catch {
-        if (!ignore) {
-          setSessdataStatus("invalid");
-        }
+        if (!ignore) setSessdata("invalid");
       }
-    }
+    })();
 
-    void checkSessdata();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [open]);
 
-  const presets: Preset[] = ["7d", "30d", "3m", "6m", "1y", "all"];
-
-  function handlePreset(preset: Preset) {
-    setActivePreset(preset);
-    const { start, end } = getPresetDates(preset);
-    setStartDate(start);
-    setEndDate(end);
-  }
-
-  function resetForm() {
+  function reset() {
     setUid("");
     setStartDate("");
     setEndDate("");
     setActivePreset(null);
-    setSessdataStatus(null);
+    setSessdata(null);
+    setError(null);
   }
 
-  function handleDialogOpenChange(nextOpen: boolean) {
-    onOpenChange(nextOpen);
-    if (!nextOpen) {
-      resetForm();
-    }
+  function close(next: boolean) {
+    onOpenChange(next);
+    if (!next) reset();
   }
 
-  async function handleSubmit() {
-    if (!uid || !startDate || !endDate) return;
-    setLoading(true);
+  function applyPreset(preset: Preset) {
+    setActivePreset(preset);
+    const { start, end } = presetDates(preset);
+    setStartDate(start);
+    setEndDate(end);
+  }
+
+  const rangeInvalid = Boolean(startDate && endDate && startDate > endDate);
+  const canSubmit = Boolean(uid && startDate && endDate) && !rangeInvalid && !submitting;
+
+  async function submit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
     try {
       await api.fetch(Number(uid), startDate, endDate);
-      onFetchStarted();
-      handleDialogOpenChange(false);
-    } catch (err) {
-      console.error("Fetch failed:", err);
+      close(false);
+    } catch {
+      setError(t("query.fetchFailed"));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  }
-
-  function handleCancel() {
-    handleDialogOpenChange(false);
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("app.newQuery")}</DialogTitle>
+          <DialogTitle>{t("query.title")}</DialogTitle>
+          <DialogDescription>{t("query.subtitle")}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
-          {sessdataStatus === "missing" && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              {t("query.sessdataWarning")}
-            </div>
+        <div className="flex flex-col gap-4">
+          {sessdata === "missing" && (
+            <MissingColumn
+              title={t("query.sessdataMissingTitle")}
+              note={t("query.sessdataWarning")}
+              actionLabel={t("query.goToSettings")}
+              actionTo="/settings"
+            />
           )}
-          {sessdataStatus === "invalid" && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-              {t("query.sessdataInvalid")}
-            </div>
+          {sessdata === "invalid" && (
+            <MissingColumn
+              title={t("query.sessdataInvalidTitle")}
+              note={t("query.sessdataInvalid")}
+              actionLabel={t("query.goToSettings")}
+              actionTo="/settings"
+            />
           )}
 
-          {/* UID input */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="uid-input">{t("query.uid")}</Label>
+            <Label htmlFor="uid-input" className="column-label">{t("query.uid")}</Label>
             <Input
               id="uid-input"
               type="number"
-              placeholder="e.g. 12345678"
+              inputMode="numeric"
+              placeholder="546195"
               value={uid}
               onChange={(e) => setUid(e.target.value)}
             />
+            <p className="text-colophon leading-relaxed tracking-normal text-ink-3">
+              {t("query.uidHelp")}
+            </p>
           </div>
 
-          {/* Date preset buttons */}
-          <div className="flex flex-col gap-1.5">
-            <Label>{t("query.dateRange")}</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {presets.map((preset) => (
+          <div className="flex flex-col gap-2">
+            <Label className="column-label">{t("query.dateRange")}</Label>
+            <div className="flex flex-wrap gap-px border border-rule-2">
+              {PRESETS.map((preset) => (
                 <button
                   key={preset}
                   type="button"
-                  onClick={() => handlePreset(preset)}
-                  className={
-                    "rounded px-2.5 py-1 text-xs font-medium border transition-colors " +
-                    (activePreset === preset
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-background text-foreground border-border hover:bg-muted")
-                  }
+                  onClick={() => applyPreset(preset)}
+                  aria-pressed={activePreset === preset}
+                  className={cn(
+                    "flex-1 px-2.5 py-1.5 text-note font-medium transition-colors outline-none",
+                    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mark",
+                    activePreset === preset
+                      ? "bg-ink text-paper"
+                      : "bg-transparent text-ink-2 hover:bg-paper-3 hover:text-ink",
+                  )}
                 >
                   {t(`query.preset.${preset}`)}
                 </button>
               ))}
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="start-date" className="column-label">{t("query.startDate")}</Label>
+                <input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }}
+                  className={dateFieldClass}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="end-date" className="column-label">{t("query.endDate")}</Label>
+                <input
+                  id="end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }}
+                  className={dateFieldClass}
+                />
+              </div>
+            </div>
+
+            {rangeInvalid && <p className="text-note text-mark">{t("query.rangeInvalid")}</p>}
           </div>
 
-          {/* Custom date pickers */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="start-date">Start Date</Label>
-              <input
-                id="start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setActivePreset(null);
-                }}
-                className="flex h-8 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="end-date">End Date</Label>
-              <input
-                id="end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setActivePreset(null);
-                }}
-                className="flex h-8 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              />
-            </div>
-          </div>
+          {error && <p className="text-note text-mark">{error}</p>}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel} disabled={loading}>
+          <Button variant="outline" onClick={() => close(false)} disabled={submitting}>
             {t("common.cancel")}
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !uid || !startDate || !endDate}
-            className="bg-blue-500 hover:bg-blue-600 text-white"
-          >
-            {loading ? t("common.loading") : t("common.fetchData")}
+          <Button variant="default" onClick={submit} disabled={!canSubmit}>
+            {submitting ? t("query.submitting") : t("common.fetchData")}
           </Button>
         </DialogFooter>
       </DialogContent>

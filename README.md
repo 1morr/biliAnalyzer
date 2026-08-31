@@ -5,25 +5,35 @@ Bilibili 视频数据分析仪表板。输入 UP 主 UID 和时间段，获取�
 ## 功能
 
 - 输入 Bilibili UID + 时间段，抓取该时间段内所有视频数据
+- 导言：用一句人话给出结论，关键数字以中文着重号标出
 - 总览统计：播放量、点赞、投币、收藏、分享、弹幕、评论
-- 可视化图表：播放量趋势、互动数据对比、播放量 vs 互动率散点图
-- 词云：标题、标签、弹幕、评论
-- 情感分析：评论情感分布、趋势、词云及受众画像
-- 视频详情页：单个视频数据 + 雷达图对比（vs 平均值）
-- AI 分析：接入 OpenAI 兼容 API，分析最火内容、成功因素、改进建议
+- 可视化图表：播放量记录、互动数据对比、播放量 vs 互动率散点图、时长影响、发布时段密度网格
+- 词表：标题、标签、字幕、弹幕、评论、用户名 —— 词频即字级，点词可下钻到原始弹幕与评论
+- 受众维度：性别、大会员、等级、地区，可作为筛选轴影响词表
+- 情感分析：情感比例尺、走势、情感词表，以及「受众 × 情感」交叉矩阵
+- 视频详情页：单个视频数据 + 雷达图与增减栏（vs 查询区间平均值）
+- AI 分析：接入 OpenAI 兼容 API，带工具调用，可就数据继续追问
 - 中文 / English 双语支持
-- 深色 / 浅色模式
+- 浅色 / 深色（反白制版）双主题
 - Docker 一键部署
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|------|
-| 前端 | Vite + React 19 + TypeScript + Shadcn/ui + Tailwind CSS v4 + ECharts |
+| 前端 | Vite + React 19 + TypeScript + Tailwind CSS v4 + Base UI（shadcn）+ ECharts |
+| 字体 | Noto Serif SC（标题）+ Libre Franklin / Noto Sans SC（正文与数字），经 fontsource 自托管 |
 | 后端 | FastAPI + SQLAlchemy 2.0 (async) + aiosqlite + httpx |
-| 词云 | jieba 分词 + wordcloud |
+| 分词 | jieba |
+| 情感 | SnowNLP |
 | AI | OpenAI SDK (SSE streaming) |
 | 部署 | Docker Compose (Nginx + Uvicorn) |
+
+## 设计
+
+界面遵循一套记录在 [`DESIGN.md`](DESIGN.md) 的设计系统；产品事实记录在 [`PRODUCT.md`](PRODUCT.md)。
+颜色带语义而非装饰：墨色承载数据，朱红是「编辑的手」（选中、下钻、标注），蓝铅笔是「系统的话」（进度、注记），
+情感的正负两极以红蓝表示并以明度分离，灰阶下同样可读。
 
 ---
 

@@ -1,17 +1,175 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+
+/* 正文與數字走 Franklin（新聞體傳承），中文落到黑體；標題走宋體。 */
+@import "@fontsource-variable/libre-franklin";
+@import "@fontsource-variable/noto-sans-sc";
+@import "@fontsource-variable/noto-serif-sc";
 
 @custom-variant dark (&:is(.dark *));
 
-body {
-  margin: 0;
+/* ============================================================
+   校樣間 / The Proof Sheet
+   中文報刊鉛字排版與編輯校對記號。
+   紙、墨、欄線、朱批、藍鉛筆 —— 五種材料，沒有第六種。
+   ============================================================ */
+
+:root {
+  /* --- 紙與墨 ---------------------------------------------- */
+  --paper: oklch(0.955 0.008 85); /* 新聞紙 */
+  --paper-2: oklch(0.928 0.009 85); /* 欄內底、表頭 */
+  --paper-3: oklch(0.898 0.010 85); /* 壓深一階：hover、選中底 */
+  --ink: oklch(0.205 0.012 60); /* 鉛字黑 */
+  --ink-2: oklch(0.435 0.012 60); /* 次要文字 5.6:1 */
+  --ink-3: oklch(0.485 0.010 60); /* 最弱文字：紙與欄底上皆過 4.5:1 */
+
+  /* --- 欄線 ------------------------------------------------- */
+  --rule: oklch(0.815 0.010 80); /* 細欄線 */
+  --rule-2: oklch(0.700 0.010 80); /* 中線：表格橫線 */
+  --rule-strong: oklch(0.300 0.012 60); /* 報頭粗線 */
+
+  /* --- 編輯的手 --------------------------------------------- */
+  --mark: oklch(0.530 0.190 33); /* 朱批紅：選中、下鑽、標註 */
+  --mark-ink: oklch(0.985 0.004 85); /* 朱批上的字 */
+  --mark-wash: oklch(0.530 0.190 33 / 0.10); /* 朱批淡痕 */
+  --pencil: oklch(0.470 0.110 250); /* 藍鉛筆：系統的話、進度、註記 */
+  --pencil-wash: oklch(0.470 0.110 250 / 0.10);
+
+  /* --- 情感兩極：暖墨與冷墨。朱批與藍鉛筆是編輯的手，不做資料色。 --- */
+  --pos: oklch(0.430 0.055 45);
+  --neu: oklch(0.760 0.005 80);
+  --neg: oklch(0.500 0.045 250);
+
+  /* --- 圖表：一條墨階，不是彩虹 ------------------------------ */
+  --seq-1: oklch(0.255 0.014 60);
+  --seq-2: oklch(0.400 0.014 65);
+  --seq-3: oklch(0.545 0.012 70);
+  --seq-4: oklch(0.690 0.011 75);
+  --seq-5: oklch(0.815 0.010 80);
+
+  /* --- 鉛字級數（傳統號數，96dpi）----------------------------- */
+  --t-1: 2.1875rem; /* 一號 26pt */
+  --t-2: 1.8125rem; /* 二號 22pt */
+  --t-3: 1.3125rem; /* 三號 16pt */
+  --t-4: 1.1875rem; /* 四號 14pt */
+  --t-x4: 1rem; /* 小四 12pt —— 中文正文 */
+  --t-5: 0.875rem; /* 五號 10.5pt —— 介面文字 */
+  --t-x5: 0.75rem; /* 小五 9pt —— 版邊註記 */
+  --t-6: 0.625rem; /* 六號 7.5pt —— 版權標記 */
+
+  /* --- 字體 -------------------------------------------------- */
+  --font-song: "Noto Serif SC Variable", "Songti SC", "SimSun", "Source Han Serif SC", serif;
+  --font-hei: "Libre Franklin Variable", "Noto Sans SC Variable", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+
+  /* --- 版面 -------------------------------------------------- */
+  --radius: 0px; /* 排版無圓角 */
+  --gutter: 1.5rem; /* 欄間距 */
+  /* 天頭高度：檢字架的刊頭與每頁報頭共用，頭線才能橫貫整張紙。 */
+  --head-h: 4.25rem;
+  --shadow-sheet: 0 2px 28px oklch(0.2 0.01 60 / 0.16);
+
+  /* --- shadcn 相容層：讓既有基礎元件直接繼承這個世界 --------- */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--paper-3);
+  --accent-foreground: var(--ink);
+  --destructive: var(--mark);
+  --border: var(--rule);
+  --input: var(--rule-2);
+  --ring: var(--mark);
+  --chart-1: var(--seq-1);
+  --chart-2: var(--seq-2);
+  --chart-3: var(--seq-3);
+  --chart-4: var(--seq-4);
+  --chart-5: var(--seq-5);
+  --sidebar: var(--paper-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--paper-3);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--mark);
+}
+
+/* 深色不是把紙調暗，是製版負片：黑底、白字、細亮欄線。 */
+.dark {
+  --paper: oklch(0.175 0.008 70);
+  --paper-2: oklch(0.225 0.008 70);
+  --paper-3: oklch(0.272 0.008 70);
+  --ink: oklch(0.945 0.006 85);
+  --ink-2: oklch(0.740 0.008 80);
+  --ink-3: oklch(0.660 0.008 80);
+
+  --rule: oklch(0.335 0.008 70);
+  --rule-2: oklch(0.440 0.008 75);
+  --rule-strong: oklch(0.720 0.008 80);
+
+  --mark: oklch(0.660 0.180 33);
+  --mark-ink: oklch(0.160 0.010 60);
+  --mark-wash: oklch(0.660 0.180 33 / 0.16);
+  --pencil: oklch(0.680 0.120 245);
+  --pencil-wash: oklch(0.680 0.120 245 / 0.16);
+
+  --pos: oklch(0.870 0.045 60);
+  --neu: oklch(0.400 0.005 80);
+  --neg: oklch(0.620 0.040 250);
+
+  --seq-1: oklch(0.930 0.008 85);
+  --seq-2: oklch(0.780 0.008 80);
+  --seq-3: oklch(0.640 0.008 78);
+  --seq-4: oklch(0.500 0.008 74);
+  --seq-5: oklch(0.370 0.008 70);
+
+  --shadow-sheet: 0 2px 32px oklch(0 0 0 / 0.55);
 }
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-rule-strong: var(--rule-strong);
+  --color-mark: var(--mark);
+  --color-mark-ink: var(--mark-ink);
+  --color-mark-wash: var(--mark-wash);
+  --color-pencil: var(--pencil);
+  --color-pencil-wash: var(--pencil-wash);
+  --color-pos: var(--pos);
+  --color-neu: var(--neu);
+  --color-neg: var(--neg);
+
+  --text-h1: var(--t-1);
+  --text-h2: var(--t-2);
+  --text-h3: var(--t-3);
+  --text-h4: var(--t-4);
+  --text-body: var(--t-x4);
+  --text-ui: var(--t-5);
+  --text-note: var(--t-x5);
+  --text-colophon: var(--t-6);
+
+  --font-song: var(--font-song);
+  --font-sans: var(--font-hei);
+  --font-heading: var(--font-song);
+
+  --shadow-sheet: var(--shadow-sheet);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,92 +201,163 @@ body {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--rule);
+    outline-color: var(--mark);
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
-    @apply font-sans;
+    font-family: var(--font-hei);
+    /* 表格數字必須對齊：這是分析工具的主角。 */
+    font-variant-numeric: tabular-nums lining-nums;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: var(--t-5);
+    line-height: 1.55;
+    letter-spacing: 0.005em;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-song);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  /* --- 瀏覽器自己畫的那些部分，也歸這個設計系統管 ------------ */
+  ::selection {
+    background: var(--mark-wash);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--mark);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: var(--ink);
+    text-decoration-color: var(--rule-2);
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: from-font;
+  }
+  a:hover {
+    color: var(--mark);
+    text-decoration-color: var(--mark);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--rule);
+    border: 3px solid var(--paper);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--rule-2);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-3);
+  }
+
+  input,
+  textarea {
+    caret-color: var(--mark);
+  }
+}
+
+@layer components {
+  /* 著重號：中文原生的強調方式。不是加粗，不是螢光筆。 */
+  .zhuozhong {
+    text-emphasis: filled dot var(--mark);
+    -webkit-text-emphasis: filled dot var(--mark);
+    text-emphasis-position: under right;
+    -webkit-text-emphasis-position: under right;
+  }
+
+  /* 花邊：報刊的分節雙線 */
+  .rule-double {
+    border-top: 1px solid var(--rule-2);
+    box-shadow: 0 2px 0 -1px var(--rule-2);
+  }
+
+  /* 欄標題：小級數、寬字距、墨色最弱 */
+  .column-label {
+    font-size: var(--t-x5);
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+
+  /* 版權標記行：版邊最小級數 */
+  .colophon {
+    font-size: var(--t-6);
+    line-height: 1.4;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+  }
+
+  /* 中文正文的行氣 */
+  .prose-cn {
+    font-size: var(--t-x4);
+    line-height: 1.8;
+    letter-spacing: 0.015em;
+    max-width: 68ch;
+    text-wrap: pretty;
+  }
+}
+
+/* 上墨：載入時逐欄顯影，不是骨架屏閃爍。 */
+@keyframes ink-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

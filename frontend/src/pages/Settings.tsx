@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { EyeIcon, EyeOffIcon, CheckCircleIcon, XCircleIcon, Loader2Icon } from "lucide-react";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { api } from "@/lib/api";
-import { useTheme } from "@/hooks/useTheme";
+import { useTheme, type Theme } from "@/hooks/useTheme";
 import i18n from "@/i18n";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import Masthead from "@/components/proof/Masthead";
+import { InkPulse } from "@/components/proof/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +28,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BlankSheet } from "@/components/proof/States";
 
-type Theme = "light" | "dark" | "system";
+type TestStatus = "idle" | "loading" | "ok" | "error";
 
 const MASK = "***";
 
-function PasswordInput({
+/** 規格表的一列：左欄是項目名，右欄是填寫區。 */
+function SpecRow({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-x-8 gap-y-2 border-b border-rule py-4 md:grid-cols-[minmax(8rem,1fr)_minmax(0,2.4fr)]">
+      <div>
+        <p className="font-song text-ui font-semibold text-ink">{label}</p>
+        {help && <p className="mt-1 text-note leading-relaxed text-ink-3">{help}</p>}
+      </div>
+      <div className="flex flex-col gap-2.5">{children}</div>
+    </div>
+  );
+}
+
+function TestResult({ status, message }: { status: TestStatus; message: string }) {
+  if (status !== "ok" && status !== "error") return null;
+  return (
+    <span
+      className={cn("text-note leading-relaxed", status === "ok" ? "text-pencil" : "text-mark")}
+    >
+      {message || (status === "ok" ? "OK" : "")}
+    </span>
+  );
+}
+
+function SecretInput({
   value,
   onChange,
   placeholder,
@@ -43,6 +77,7 @@ function PasswordInput({
   placeholder?: string;
   id?: string;
 }) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative flex items-center">
@@ -52,14 +87,14 @@ function PasswordInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="pr-10"
+        className="pr-9"
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="absolute right-2 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+        className="absolute right-2 flex items-center text-ink-3 transition-colors hover:text-mark"
         tabIndex={-1}
-        aria-label={visible ? "Hide" : "Show"}
+        aria-label={visible ? t("settings.hide") : t("settings.show")}
       >
         {visible ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
       </button>
@@ -67,31 +102,29 @@ function PasswordInput({
   );
 }
 
+/** 排版規格表 —— what the press needs before it can set the type. */
 export default function Settings() {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
 
-  // Form fields
   const [sessdata, setSessdata] = useState(MASK);
   const [aiBaseUrl, setAiBaseUrl] = useState("https://api.openai.com/v1");
   const [aiApiKey, setAiApiKey] = useState(MASK);
   const [aiModel, setAiModel] = useState("gpt-4o");
   const [proxyList, setProxyList] = useState("");
 
-  // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [sessdataTestStatus, setSessdataTestStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
-  const [sessdataTestMessage, setSessdataTestMessage] = useState<string>("");
-  const [testStatus, setTestStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
-  const [testMessage, setTestMessage] = useState<string>("");
+  const [sessdataTest, setSessdataTest] = useState<TestStatus>("idle");
+  const [sessdataMessage, setSessdataMessage] = useState("");
+  const [aiTest, setAiTest] = useState<TestStatus>("idle");
+  const [aiMessage, setAiMessage] = useState("");
 
   const [lang, setLang] = useState<string>(localStorage.getItem("lang") || "zh");
 
-  // Fetch current settings on mount
   useEffect(() => {
     api
       .getSettings()
@@ -103,18 +136,17 @@ export default function Settings() {
         setProxyList(s.proxy_list || "");
       })
       .catch(() => {
-        // keep defaults
+        // Keep defaults; saving still works.
       })
       .finally(() => setLoading(false));
   }, []);
 
-  function handleSessdataChange(value: string) {
-    setSessdata(value);
-    setSessdataTestStatus("idle");
-    setSessdataTestMessage("");
+  /** Any edit invalidates the last test result. */
+  function resetAiTest() {
+    setAiTest("idle");
+    setAiMessage("");
   }
 
-  // Save server-side settings
   async function handleSave() {
     setSaving(true);
     setSaved(false);
@@ -125,292 +157,237 @@ export default function Settings() {
         ai_model: aiModel,
         proxy_list: proxyList,
       };
-      // Only send if user changed from mask
       if (sessdata !== MASK) payload.sessdata = sessdata;
       if (aiApiKey !== MASK) payload.ai_api_key = aiApiKey;
 
       await api.updateSettings(payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Failed to save");
+    } catch {
+      setSaveError(t("settings.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleTestSessdata() {
-    setSessdataTestStatus("loading");
-    setSessdataTestMessage("");
+    setSessdataTest("loading");
+    setSessdataMessage("");
     try {
       const res = await api.testSessdata(sessdata);
-      const isOk = res.status === "ok";
-      setSessdataTestStatus(isOk ? "ok" : "error");
-      setSessdataTestMessage(isOk ? (res.message || "OK") : (res.message || "Validation failed"));
-    } catch (e) {
-      setSessdataTestStatus("error");
-      setSessdataTestMessage(e instanceof Error ? e.message : "Validation failed");
+      const ok = res.status === "ok";
+      setSessdataTest(ok ? "ok" : "error");
+      setSessdataMessage(res.message || (ok ? t("settings.testOk") : t("settings.testFailed")));
+    } catch {
+      setSessdataTest("error");
+      setSessdataMessage(t("settings.testFailed"));
     }
   }
 
-  // Test AI connection
-  async function handleTestConnection() {
-    setTestStatus("loading");
-    setTestMessage("");
+  async function handleTestAi() {
+    setAiTest("loading");
+    setAiMessage("");
     try {
       const res = await api.testAi({
         ai_base_url: aiBaseUrl,
         ai_api_key: aiApiKey,
         ai_model: aiModel,
       });
-      const isOk = res.status === "ok";
-      setTestStatus(isOk ? "ok" : "error");
-      setTestMessage(isOk ? (res.message || "OK") : (res.message || "Connection failed"));
-    } catch (e) {
-      setTestStatus("error");
-      setTestMessage(e instanceof Error ? e.message : "Connection failed");
+      const ok = res.status === "ok";
+      setAiTest(ok ? "ok" : "error");
+      setAiMessage(res.message || (ok ? t("settings.testOk") : t("settings.testFailed")));
+    } catch {
+      setAiTest("error");
+      setAiMessage(t("settings.testFailed"));
     }
   }
 
-  // Language change
-  function handleLangChange(value: string | null) {
-    if (!value) return;
-    setLang(value);
-    i18n.changeLanguage(value);
-    localStorage.setItem("lang", value);
-  }
-
-  // Theme change
-  function handleThemeChange(values: string[]) {
-    if (values.length === 0) return;
-    setTheme(values[0] as Theme);
-  }
-
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
-      </div>
-    );
+    return <BlankSheet title={t("common.loading")} note={t("blank.loadingNote")} />;
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
+    <>
+      <Masthead
+        title={t("settings.title")}
+        actions={
+          <div className="flex items-center gap-3">
+            {saved && <span className="text-note text-pencil">{t("settings.saved")}</span>}
+            {saveError && <span className="text-note text-mark">{saveError}</span>}
+            <Button variant="default" onClick={handleSave} disabled={saving}>
+              {saving && <InkPulse />}
+              {t("settings.save")}
+            </Button>
+          </div>
+        }
+      />
 
-      {/* ── Section 1: Bilibili Connection ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.bilibili")}</CardTitle>
-          <CardDescription>{t("settings.sessdataHelp")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sessdata">{t("settings.sessdata")}</Label>
-            <PasswordInput
+      <div className="flex max-w-3xl flex-col px-4 pt-6 pb-16 md:px-8">
+        <div className="border-t border-rule">
+          <SpecRow label={t("settings.bilibili")} help={t("settings.sessdataHelp")}>
+            <SecretInput
               id="sessdata"
               value={sessdata}
-              onChange={handleSessdataChange}
+              onChange={(v) => {
+                setSessdata(v);
+                setSessdataTest("idle");
+                setSessdataMessage("");
+              }}
               placeholder="SESSDATA"
             />
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={handleTestSessdata}
-              disabled={sessdataTestStatus === "loading"}
-            >
-              {sessdataTestStatus === "loading" && (
-                <Loader2Icon className="size-4 animate-spin" />
-              )}
-              {t("settings.validateSessdata")}
-            </Button>
-            {sessdataTestStatus === "ok" && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
-                <CheckCircleIcon className="size-4" />
-                {sessdataTestMessage || "OK"}
-              </span>
-            )}
-            {sessdataTestStatus === "error" && (
-              <span className="flex items-center gap-1 text-sm text-red-500">
-                <XCircleIcon className="size-4" />
-                {sessdataTestMessage}
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestSessdata}
+                disabled={sessdataTest === "loading"}
+              >
+                {sessdataTest === "loading" && <InkPulse />}
+                {t("settings.validateSessdata")}
+              </Button>
+              <TestResult status={sessdataTest} message={sessdataMessage} />
+            </div>
+          </SpecRow>
 
-      {/* ── Section 1.5: Proxy Configuration ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.proxy")}</CardTitle>
-          <CardDescription>{t("settings.proxyHelp")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
+          <SpecRow label={t("settings.proxy")} help={t("settings.proxyHelp")}>
             <textarea
               value={proxyList}
               onChange={(e) => setProxyList(e.target.value)}
               placeholder={t("settings.proxyPlaceholder")}
               rows={4}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono resize-y"
+              aria-label={t("settings.proxy")}
+              className="w-full resize-y border border-rule-2 bg-transparent px-2.5 py-2 font-sans text-ui leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:border-mark focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-mark/40"
             />
-          </div>
-        </CardContent>
-      </Card>
+          </SpecRow>
 
-      {/* ── Section 2: AI Configuration ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.aiConfig")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ai-base-url">{t("settings.baseUrl")}</Label>
-            <Input
-              id="ai-base-url"
-              value={aiBaseUrl}
-              onChange={(e) => setAiBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ai-api-key">{t("settings.apiKey")}</Label>
-            <PasswordInput
-              id="ai-api-key"
-              value={aiApiKey}
-              onChange={(v) => setAiApiKey(v)}
-              placeholder="sk-..."
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ai-model">{t("settings.model")}</Label>
-            <Input
-              id="ai-model"
-              value={aiModel}
-              onChange={(e) => setAiModel(e.target.value)}
-              placeholder="gpt-4o"
-            />
-          </div>
-          <Separator />
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={testStatus === "loading"}
-            >
-              {testStatus === "loading" && (
-                <Loader2Icon className="size-4 animate-spin" />
-              )}
-              {t("settings.testConnection")}
-            </Button>
-            {testStatus === "ok" && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
-                <CheckCircleIcon className="size-4" />
-                {testMessage || "OK"}
-              </span>
-            )}
-            {testStatus === "error" && (
-              <span className="flex items-center gap-1 text-sm text-red-500">
-                <XCircleIcon className="size-4" />
-                {testMessage}
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          <SpecRow label={t("settings.aiConfig")} help={t("settings.aiHelp")}>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-base-url" className="column-label">
+                {t("settings.baseUrl")}
+              </Label>
+              <Input
+                id="ai-base-url"
+                value={aiBaseUrl}
+                onChange={(e) => {
+                  setAiBaseUrl(e.target.value);
+                  resetAiTest();
+                }}
+                placeholder="https://api.openai.com/v1"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-api-key" className="column-label">
+                {t("settings.apiKey")}
+              </Label>
+              <SecretInput
+                id="ai-api-key"
+                value={aiApiKey}
+                onChange={(v) => {
+                  setAiApiKey(v);
+                  resetAiTest();
+                }}
+                placeholder="sk-..."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-model" className="column-label">
+                {t("settings.model")}
+              </Label>
+              <Input
+                id="ai-model"
+                value={aiModel}
+                onChange={(e) => {
+                  setAiModel(e.target.value);
+                  resetAiTest();
+                }}
+                placeholder="gpt-4o"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestAi}
+                disabled={aiTest === "loading"}
+              >
+                {aiTest === "loading" && <InkPulse />}
+                {t("settings.testConnection")}
+              </Button>
+              <TestResult status={aiTest} message={aiMessage} />
+            </div>
+          </SpecRow>
 
-      {/* ── Section 3: Appearance ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.appearance")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>{t("settings.theme")}</Label>
-            <ToggleGroup
-              value={[theme]}
-              onValueChange={handleThemeChange}
-              variant="outline"
-            >
-              <ToggleGroupItem value="light">{t("settings.light")}</ToggleGroupItem>
-              <ToggleGroupItem value="dark">{t("settings.dark")}</ToggleGroupItem>
-              <ToggleGroupItem value="system">{t("settings.system")}</ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t("settings.language")}</Label>
-            <Select value={lang} onValueChange={handleLangChange}>
-              <SelectTrigger className="w-40">
-                <SelectValue>{lang === "zh" ? "中文" : "English"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="zh">中文</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          <SpecRow label={t("settings.appearance")}>
+            <div className="flex flex-col gap-1.5">
+              <Label className="column-label">{t("settings.theme")}</Label>
+              <ToggleGroup
+                value={[theme]}
+                onValueChange={(vals: string[]) => vals.length && setTheme(vals[0] as Theme)}
+                variant="outline"
+              >
+                <ToggleGroupItem value="light">{t("settings.light")}</ToggleGroupItem>
+                <ToggleGroupItem value="dark">{t("settings.dark")}</ToggleGroupItem>
+                <ToggleGroupItem value="system">{t("settings.system")}</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="column-label">{t("settings.language")}</Label>
+              <Select
+                value={lang}
+                onValueChange={(v: string | null) => {
+                  if (!v) return;
+                  setLang(v);
+                  i18n.changeLanguage(v);
+                  localStorage.setItem("lang", v);
+                }}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue>{lang === "zh" ? "中文" : "English"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zh">中文</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </SpecRow>
 
-      {/* ── Section 4: Data Management ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.data")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Dialog>
-            <DialogTrigger render={<Button variant="destructive" />}>
-              {t("settings.clearAll")}
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("settings.clearAll")}</DialogTitle>
-                <DialogDescription>{t("settings.clearConfirm")}</DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>
-                  {t("common.cancel")}
-                </DialogClose>
-                <DialogClose
-                  render={
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        localStorage.clear();
-                        window.location.reload();
-                      }}
-                    />
-                  }
-                >
-                  {t("common.confirm")}
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
+          <SpecRow label={t("settings.data")} help={t("settings.dataHelp")}>
+            <div>
+              <Dialog>
+                <DialogTrigger render={<Button variant="destructive" size="sm" />}>
+                  {t("settings.clearAll")}
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("settings.clearAll")}</DialogTitle>
+                    <DialogDescription>{t("settings.clearConfirm")}</DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose render={<Button variant="outline" />}>
+                      {t("common.cancel")}
+                    </DialogClose>
+                    <DialogClose
+                      render={
+                        <Button
+                          variant="destructive"
+                          onClick={() => {
+                            localStorage.clear();
+                            window.location.reload();
+                          }}
+                        />
+                      }
+                    >
+                      {t("common.confirm")}
+                    </DialogClose>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </SpecRow>
+        </div>
 
-      {/* ── Save button ── */}
-      <div className="flex items-center gap-3 pb-6">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving && <Loader2Icon className="size-4 animate-spin" />}
-          {t("settings.save")}
-        </Button>
-        {saved && (
-          <span className="flex items-center gap-1 text-sm text-green-600">
-            <CheckCircleIcon className="size-4" />
-            {t("settings.saved")}
-          </span>
-        )}
-        {saveError && (
-          <span className="flex items-center gap-1 text-sm text-red-500">
-            <XCircleIcon className="size-4" />
-            {saveError}
-          </span>
-        )}
       </div>
-    </div>
+    </>
   );
 }
