@@ -9,7 +9,10 @@ __pycache__/
 .env
 .secret_key
 .playwright-mcp/
+# Screenshots captured while poking at the app during development. The ones
+# the README uses live in docs/images/ and are meant to be committed.
 *.png
+!docs/images/*.png
 .impeccable/
 .venv/
 .idea/
