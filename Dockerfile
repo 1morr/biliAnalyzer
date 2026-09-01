@@ -11,11 +11,15 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    fonts-wqy-microhei gcc \
+    fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies from pyproject.toml (single source of truth) before
+# copying the rest of the source, so this layer stays cached across code-only
+# changes. tomllib is stdlib on Python 3.11+, so no extra tool is needed.
+COPY backend/pyproject.toml .
+RUN python -c "import tomllib; deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; print('\n'.join(deps))" > /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY backend/ .
 COPY --from=frontend-builder /app/dist ./frontend/dist/
