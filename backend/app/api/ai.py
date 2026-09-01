@@ -1,5 +1,6 @@
 """AI conversation endpoints with function calling and SSE streaming."""
 import json
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
@@ -17,6 +18,8 @@ from app.services.ai_service import (
     get_openai_client, build_messages_from_db, save_message, stream_agent_response,
 )
 from app.services.ai_tools import get_tools
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -157,7 +160,11 @@ async def _create_conversation_stream(
     initial_msg = body.content if (preset == "free_chat" and body.content) else get_initial_message(preset)
     await save_message(db, conv.id, "system", content=system_content)
     await save_message(db, conv.id, "user", content=initial_msg)
-    await db.flush()
+    # Commit (not just flush) here: the frontend receives conv.id via the SSE
+    # `conversation_created` event below before the AI call even starts, so if
+    # the AI call fails and nothing has been committed yet, that conversation_id
+    # would 404 on every later GET despite the client believing it exists.
+    await db.commit()
 
     # Build OpenAI messages
     messages = [
@@ -179,8 +186,9 @@ async def _create_conversation_stream(
         try:
             async for event in stream_agent_response(client, model, messages, tools, db, context, conv.id):
                 yield {"event": "message", "data": json.dumps(event)}
-        except Exception as e:
-            yield {"event": "message", "data": json.dumps({"type": "error", "error": str(e)})}
+        except Exception:
+            logger.exception("AI conversation stream failed for conversation %s", conv.id)
+            yield {"event": "message", "data": json.dumps({"type": "error", "error": "AI request failed. Check server logs for details."})}
 
     return EventSourceResponse(event_generator())
 
@@ -194,10 +202,12 @@ async def _send_message_stream(
 
     lang = _detect_lang(request)
 
-    # Save user message
+    # Save user message. Commit (not just flush) so the message survives even
+    # if the AI call below fails — see the matching comment in
+    # _create_conversation_stream.
     await save_message(db, conv.id, "user", content=body.content)
     conv.updated_at = datetime.utcnow()
-    await db.flush()
+    await db.commit()
 
     # Rebuild full message history
     result = await db.execute(
@@ -220,8 +230,9 @@ async def _send_message_stream(
         try:
             async for event in stream_agent_response(client, model, messages, tools, db, context, conv.id):
                 yield {"event": "message", "data": json.dumps(event)}
-        except Exception as e:
-            yield {"event": "message", "data": json.dumps({"type": "error", "error": str(e)})}
+        except Exception:
+            logger.exception("AI conversation stream failed for conversation %s", conv.id)
+            yield {"event": "message", "data": json.dumps({"type": "error", "error": "AI request failed. Check server logs for details."})}
 
     return EventSourceResponse(event_generator())
 

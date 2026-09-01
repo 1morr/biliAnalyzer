@@ -2,7 +2,9 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      # Bound to loopback only: the API has no authentication on any endpoint,
+      # so publishing on all interfaces would expose it to the whole network.
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
     environment:

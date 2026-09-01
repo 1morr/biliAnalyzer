@@ -1,5 +1,7 @@
 # backend/app/api/settings.py
-from fastapi import APIRouter, Depends
+import logging
+from cryptography.fernet import InvalidToken
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.models import AppSettings
@@ -7,9 +9,15 @@ from app.schemas.settings import SettingsResponse, SettingsUpdate, SessdataTestR
 from app.core.security import encrypt_value, decrypt_value
 from app.services.bilibili import BilibiliClient
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
-SENSITIVE_KEYS = {"ai_api_key", "sessdata"}
+DECRYPT_ERROR_MESSAGE = "Stored credential could not be decrypted — re-enter it in Settings"
+
+# proxy_list is included because proxy URLs routinely embed credentials
+# (http://user:pass@host:port), so it is encrypted and masked like the others.
+SENSITIVE_KEYS = {"ai_api_key", "sessdata", "proxy_list"}
 MASK = "***"
 
 DEFAULTS = {
@@ -51,7 +59,11 @@ async def _get_raw_setting(db: AsyncSession, key: str) -> str:
     if not row or not row.value:
         return DEFAULTS.get(key, "")
     if row.is_sensitive:
-        return decrypt_value(row.value)
+        try:
+            return decrypt_value(row.value)
+        except InvalidToken:
+            logger.warning("Failed to decrypt setting %r; SECRET_KEY may have been rotated", key)
+            raise HTTPException(status_code=400, detail=DECRYPT_ERROR_MESSAGE)
     return row.value
 
 
@@ -99,8 +111,9 @@ async def test_sessdata_connection(data: SessdataTestRequest, db: AsyncSession =
         result = await client.validate_sessdata()
         uname = result.get("uname")
         return {"status": "ok", "message": f"Connected as {uname}" if uname else "SESSDATA is valid"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    except Exception:
+        logger.exception("SESSDATA validation failed")
+        return {"status": "error", "message": "Failed to validate SESSDATA. Check server logs for details."}
     finally:
         await client.aclose()
 
@@ -125,5 +138,6 @@ async def test_ai_connection(data: AiTestRequest, db: AsyncSession = Depends(get
             model=model, messages=[{"role": "user", "content": "Say OK"}], max_tokens=5
         )
         return {"status": "ok", "model": model}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    except Exception:
+        logger.exception("AI connection test failed")
+        return {"status": "error", "message": "Failed to connect to the AI provider. Check server logs for details."}

@@ -8,13 +8,24 @@ import re
 import time
 import urllib.parse
 import uuid
-from xml.etree import ElementTree
 
+import defusedxml.ElementTree as ElementTree
 import httpx
 
-from app.services.proxy_pool import ProxyPool
+from app.services.proxy_pool import ProxyPool, redact_url
 
 logger = logging.getLogger(__name__)
+
+# Shared across every BilibiliClient instance so that concurrent scrapes (e.g.
+# two /api/fetch requests) cannot together double the effective request rate
+# into Bilibili's -799 risk control. A per-instance semaphore/delay would let
+# each client believe it alone is being polite.
+_THROTTLE_STATE = {
+    "semaphore": asyncio.Semaphore(1),
+    "last_request_time": 0.0,
+    "rate_limit_count": 0,
+    "base_delay": 1.5,
+}
 
 # Standard WBI mixin key permutation table
 MIXIN_KEY_ENC_TAB = [
@@ -48,10 +59,6 @@ class BilibiliClient:
         self._sub_key: str | None = None
         self._wbi_keys_ts: float = 0
         self._fingerprint_ready = False
-        self._semaphore = asyncio.Semaphore(1)  # rate limit: 1 concurrent request
-        self._last_request_time: float = 0
-        self._rate_limit_count: int = 0  # track -799 occurrences
-        self._base_delay: float = 1.5  # base delay between requests
         self._proxy_urls = proxy_urls or []
         self._proxy_pool: ProxyPool | None = None
         cookies = {
@@ -68,8 +75,9 @@ class BilibiliClient:
         client = getattr(self, "_client", None)
         if client is not None:
             await client.aclose()
-        if self._proxy_pool:
-            await self._proxy_pool.aclose()
+        proxy_pool = getattr(self, "_proxy_pool", None)
+        if proxy_pool:
+            await proxy_pool.aclose()
 
     async def _ensure_proxy_pool(self) -> ProxyPool | None:
         if not self._proxy_urls:
@@ -130,16 +138,17 @@ class BilibiliClient:
         When via_proxy=True, use a much shorter delay since each proxy IP
         has its own rate-limit budget on Bilibili's side.
         """
-        async with self._semaphore:
+        state = _THROTTLE_STATE
+        async with state["semaphore"]:
             now = time.time()
             if via_proxy:
                 delay = random.uniform(0.2, 0.6)
             else:
-                delay = random.uniform(self._base_delay, self._base_delay * 2.5)
-            wait = max(0, delay - (now - self._last_request_time))
+                delay = random.uniform(state["base_delay"], state["base_delay"] * 2.5)
+            wait = max(0, delay - (now - state["last_request_time"]))
             if wait > 0:
                 await asyncio.sleep(wait)
-            self._last_request_time = time.time()
+            state["last_request_time"] = time.time()
 
     async def _request(self, url: str, params: dict | None = None, wbi: bool = False, use_proxy: bool = True) -> dict:
         await self._ensure_fingerprint()
@@ -165,7 +174,7 @@ class BilibiliClient:
             except (httpx.ConnectError, httpx.ProxyError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 if active_entry and pool:
                     pool.report_failure(active_entry)
-                    logger.warning("Proxy %s connection error: %s, switching proxy", active_entry.url, e)
+                    logger.warning("Proxy %s connection error: %s, switching proxy", redact_url(active_entry.url), e)
                     proxy_result = await pool.get_client()
                     if proxy_result:
                         active_client, active_entry = proxy_result
@@ -211,7 +220,7 @@ class BilibiliClient:
                     continue
             # Retry on rate limit (-799) with exponential backoff
             elif code == -799:
-                self._rate_limit_count += 1
+                _THROTTLE_STATE["rate_limit_count"] += 1
                 if active_entry and pool:
                     pool.report_failure(active_entry)
                     proxy_result = await pool.get_client()
@@ -219,10 +228,10 @@ class BilibiliClient:
                         active_client, active_entry = proxy_result
                     else:
                         active_client, active_entry = self._client, None
-                # Increase base delay if getting rate limited frequently
-                if self._rate_limit_count >= 3:
-                    self._base_delay = min(self._base_delay * 1.5, 5.0)
-                    logger.warning("Frequent rate limits detected, increasing base delay to %.1fs", self._base_delay)
+                # Increase base delay (shared across all clients) if getting rate limited frequently
+                if _THROTTLE_STATE["rate_limit_count"] >= 3:
+                    _THROTTLE_STATE["base_delay"] = min(_THROTTLE_STATE["base_delay"] * 1.5, 5.0)
+                    logger.warning("Frequent rate limits detected, increasing base delay to %.1fs", _THROTTLE_STATE["base_delay"])
                 if attempt < max_retries - 1:
                     # Exponential backoff with jitter: 3s, 9s, 27s
                     delay = (3 ** (attempt + 1)) + random.uniform(0, 2)
@@ -231,8 +240,8 @@ class BilibiliClient:
                     continue
             else:
                 # Reset rate limit counter on success
-                if self._rate_limit_count > 0:
-                    self._rate_limit_count = max(0, self._rate_limit_count - 1)
+                if _THROTTLE_STATE["rate_limit_count"] > 0:
+                    _THROTTLE_STATE["rate_limit_count"] = max(0, _THROTTLE_STATE["rate_limit_count"] - 1)
                 if active_entry and pool:
                     pool.report_success(active_entry)
             return data
@@ -241,9 +250,10 @@ class BilibiliClient:
         raise Exception(f"Request to {url} exhausted retries without data")
 
     async def _refresh_wbi_keys(self):
-        await self._ensure_fingerprint()
-        resp = await self._client.get(f"{self.BASE}/x/web-interface/nav")
-        data = resp.json()["data"]
+        # Routed through _request so this is throttled/retried like every other
+        # call — a direct self._client.get() here bypassed the shared rate limiter.
+        resp = await self._request(f"{self.BASE}/x/web-interface/nav", use_proxy=False)
+        data = resp["data"]
         img_url = data["wbi_img"]["img_url"]
         sub_url = data["wbi_img"]["sub_url"]
         self._img_key = img_url.rsplit("/", 1)[1].split(".")[0]

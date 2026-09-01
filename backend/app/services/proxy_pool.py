@@ -1,11 +1,25 @@
 import logging
 import time
+import urllib.parse
 import uuid
 from dataclasses import dataclass
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def redact_url(url: str) -> str:
+    """Return scheme+host(:port) only, stripping userinfo (proxy credentials)
+    and any path/query, so proxy URLs are safe to write to logs."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "<unparsable-url>"
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return f"{parsed.scheme}://{netloc}" if parsed.scheme else netloc
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -71,10 +85,10 @@ class ProxyPool:
                 entry.client.cookies["buvid4"] = b4
             logger.debug(
                 "Proxy %s fingerprint set: buvid3=%s",
-                entry.url, b3[:8] if b3 else "",
+                redact_url(entry.url), b3[:8] if b3 else "",
             )
         except Exception as e:
-            logger.debug("Proxy %s fingerprint failed: %s", entry.url, e)
+            logger.debug("Proxy %s fingerprint failed: %s", redact_url(entry.url), e)
 
     async def get_client(self) -> tuple[httpx.AsyncClient, ProxyEntry] | None:
         if not self._entries:
@@ -103,7 +117,7 @@ class ProxyPool:
         entry.skip_until = time.time() + cooldown
         logger.warning(
             "Proxy %s failed (%d consecutive), cooldown %.0fs",
-            entry.url, entry.consecutive_failures, cooldown,
+            redact_url(entry.url), entry.consecutive_failures, cooldown,
         )
 
     async def aclose(self):

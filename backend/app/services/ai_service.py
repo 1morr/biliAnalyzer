@@ -1,12 +1,16 @@
 """Core AI agent service: function calling loop, message persistence, OpenAI client."""
 import json
+import logging
 from datetime import datetime
+from cryptography.fernet import InvalidToken
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AppSettings
 from app.models.conversation import AIConversation, AIMessage
 from app.core.security import decrypt_value
 from app.services.ai_tools import execute_tool
+
+logger = logging.getLogger(__name__)
 
 
 async def get_openai_client(db: AsyncSession) -> tuple[AsyncOpenAI, str]:
@@ -18,7 +22,14 @@ async def get_openai_client(db: AsyncSession) -> tuple[AsyncOpenAI, str]:
     base_url = base_url_row.value if base_url_row else "https://api.openai.com/v1"
     api_key = ""
     if api_key_row and api_key_row.value:
-        api_key = decrypt_value(api_key_row.value) if api_key_row.is_sensitive else api_key_row.value
+        if api_key_row.is_sensitive:
+            try:
+                api_key = decrypt_value(api_key_row.value)
+            except InvalidToken:
+                logger.warning("Failed to decrypt stored AI API key; SECRET_KEY may have been rotated")
+                raise ValueError("Stored credential could not be decrypted — re-enter it in Settings")
+        else:
+            api_key = api_key_row.value
     model = model_row.value if model_row else "gpt-4o"
 
     if not api_key:
@@ -84,8 +95,9 @@ async def stream_agent_response(
                 model=model, messages=messages, tools=tools if tools else None,
                 stream=True,
             )
-        except Exception as e:
-            yield {"type": "error", "error": str(e)}
+        except Exception:
+            logger.exception("AI chat completion request failed")
+            yield {"type": "error", "error": "AI request failed. Check server logs for details."}
             return
 
         content_parts: list[str] = []
@@ -120,8 +132,9 @@ async def stream_agent_response(
                                 entry["function"]["name"] += tc_delta.function.name
                             if tc_delta.function.arguments:
                                 entry["function"]["arguments"] += tc_delta.function.arguments
-        except Exception as e:
-            yield {"type": "error", "error": str(e)}
+        except Exception:
+            logger.exception("AI response streaming failed")
+            yield {"type": "error", "error": "AI request failed. Check server logs for details."}
             return
 
         # Save assistant message
