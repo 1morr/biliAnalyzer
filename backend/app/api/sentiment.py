@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.background_tasks import track_task
 from app.core.deps import get_db
 from app.models import Query, QueryVideo, Video, VideoSentiment
 from app.schemas.sentiment import (
@@ -98,7 +99,7 @@ async def query_sentiment_wordcloud(
     await _get_query_or_404(db, query_id)
     sentiments = await _get_query_sentiments(db, query_id)
     all_details = _collect_details(sentiments)
-    words = compute_sentiment_word_cloud(all_details, None if source == "all" else source, limit)
+    words = await asyncio.to_thread(compute_sentiment_word_cloud, all_details, None if source == "all" else source, limit)
     return [SentimentWordItem(**w) for w in words]
 
 
@@ -107,7 +108,7 @@ async def query_sentiment_demographics(query_id: int, db: AsyncSession = Depends
     await _get_query_or_404(db, query_id)
     sentiments = await _get_query_sentiments(db, query_id)
     all_details = _collect_details(sentiments)
-    cells = compute_demographic_sentiment_matrix(all_details)
+    cells = await asyncio.to_thread(compute_demographic_sentiment_matrix, all_details)
     return [DemographicSentimentCell(**c) for c in cells]
 
 
@@ -163,7 +164,7 @@ async def video_sentiment_wordcloud(
     if not sentiment:
         raise HTTPException(status_code=404, detail="No sentiment data")
     details = _safe_json_loads(sentiment.details)
-    words = compute_sentiment_word_cloud(details, None if source == "all" else source, limit)
+    words = await asyncio.to_thread(compute_sentiment_word_cloud, details, None if source == "all" else source, limit)
     return [SentimentWordItem(**w) for w in words]
 
 
@@ -173,7 +174,7 @@ async def video_sentiment_demographics(bvid: str, db: AsyncSession = Depends(get
     if not sentiment:
         raise HTTPException(status_code=404, detail="No sentiment data")
     details = _safe_json_loads(sentiment.details)
-    cells = compute_demographic_sentiment_matrix(details)
+    cells = await asyncio.to_thread(compute_demographic_sentiment_matrix, details)
     return [DemographicSentimentCell(**c) for c in cells]
 
 
@@ -215,5 +216,5 @@ async def trigger_sentiment_analysis(
     if query.sentiment_status == "analyzing":
         return {"status": "analyzing", "message": "Already in progress"}
 
-    asyncio.create_task(run_sentiment_analysis(query_id, force=force))
+    track_task(run_sentiment_analysis(query_id, force=force))
     return {"status": "started", "message": "Sentiment analysis started"}

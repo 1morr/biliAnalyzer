@@ -41,7 +41,7 @@ async def list_videos(
     query_id: int,
     sort_by: str = "views",
     order: str = "desc",
-    page: int = 1,
+    page: int = QueryParam(default=1, ge=1),
     page_size: int = QueryParam(default=20, le=100),
     search: str = QueryParam(default="", max_length=200),
     db: AsyncSession = Depends(get_db),

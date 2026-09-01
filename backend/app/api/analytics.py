@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
@@ -200,7 +201,7 @@ async def query_wordcloud(
         words = compute_user_frequencies(items)
     elif wc_type == "comment":
         items = _apply_demo_filters(_gather_query_normalized_items(rows, "comment"), gender, vip, level, location)
-        words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
+        words = await asyncio.to_thread(compute_word_frequencies, [item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_query_normalized_items(rows, "comment")
         words = compute_location_frequencies(items)
@@ -208,12 +209,12 @@ async def query_wordcloud(
         texts = _gather_query_texts(rows, wc_type)
         if not texts:
             raise HTTPException(status_code=404, detail="No data available for word cloud")
-        words = compute_tag_frequencies(texts)
+        words = await asyncio.to_thread(compute_tag_frequencies, texts)
     else:
         texts = _gather_query_texts(rows, wc_type)
         if not texts:
             raise HTTPException(status_code=404, detail="No data available for word cloud")
-        words = compute_word_frequencies(texts)
+        words = await asyncio.to_thread(compute_word_frequencies, texts)
 
     if not words:
         raise HTTPException(status_code=404, detail="Not enough data")
@@ -242,7 +243,7 @@ async def query_wordcloud_detail(
         if wc_type == "user":
             videos = extract_user_comments(tuples, word)
         else:
-            videos = extract_word_contexts(tuples, word)
+            videos = await asyncio.to_thread(extract_word_contexts, tuples, word)
     elif wc_type == "user":
         annotated = _gather_query_annotated_texts(rows, "comment")
         videos = extract_user_comments(annotated, word)
@@ -251,7 +252,7 @@ async def query_wordcloud_detail(
         videos = extract_location_comments(annotated, word)
     else:
         annotated = _gather_query_annotated_texts(rows, wc_type)
-        videos = extract_word_contexts(annotated, word)
+        videos = await asyncio.to_thread(extract_word_contexts, annotated, word)
 
     total_count = sum(v["count"] for v in videos)
     return WordDetailResponse(word=word, total_count=total_count, videos=videos)
@@ -280,7 +281,7 @@ async def video_wordcloud(
         words = compute_user_frequencies(items)
     elif wc_type == "comment":
         items = _apply_demo_filters(_gather_video_comment_items(content), gender, vip, level, location)
-        words = compute_word_frequencies([item["text"] for item in items if item.get("text")])
+        words = await asyncio.to_thread(compute_word_frequencies, [item["text"] for item in items if item.get("text")])
     elif wc_type == "location":
         items = _gather_video_normalized_items(video, content)
         words = compute_location_frequencies(items)
@@ -288,12 +289,12 @@ async def video_wordcloud(
         texts = _gather_video_texts(video, content, wc_type)
         if not texts:
             raise HTTPException(status_code=404, detail="No data available")
-        words = compute_tag_frequencies(texts)
+        words = await asyncio.to_thread(compute_tag_frequencies, texts)
     else:
         texts = _gather_video_texts(video, content, wc_type)
         if not texts:
             raise HTTPException(status_code=404, detail="No data available")
-        words = compute_word_frequencies(texts)
+        words = await asyncio.to_thread(compute_word_frequencies, texts)
 
     if not words:
         raise HTTPException(status_code=404, detail="Not enough data")
@@ -326,7 +327,7 @@ async def video_wordcloud_detail(
         if wc_type == "user":
             videos = extract_user_comments(tuples, word)
         else:
-            videos = extract_word_contexts(tuples, word)
+            videos = await asyncio.to_thread(extract_word_contexts, tuples, word)
     elif wc_type == "user":
         annotated = _gather_video_annotated_texts(video, content, "interaction")
         videos = extract_user_comments(annotated, word)
@@ -335,7 +336,7 @@ async def video_wordcloud_detail(
         videos = extract_location_comments(annotated, word)
     else:
         annotated = _gather_video_annotated_texts(video, content, wc_type)
-        videos = extract_word_contexts(annotated, word)
+        videos = await asyncio.to_thread(extract_word_contexts, annotated, word)
 
     total_count = sum(v["count"] for v in videos)
     return WordDetailResponse(word=word, total_count=total_count, videos=videos)

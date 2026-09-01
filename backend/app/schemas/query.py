@@ -1,11 +1,17 @@
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class FetchRequest(BaseModel):
-    uid: int
+    uid: int = Field(gt=0)
     start_date: date
     end_date: date
+
+    @model_validator(mode="after")
+    def _check_date_range(self) -> "FetchRequest":
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must not be after end_date")
+        return self
 
 
 class FetchResponse(BaseModel):

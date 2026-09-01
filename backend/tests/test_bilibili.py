@@ -53,7 +53,7 @@ async def test_validate_sessdata_returns_user_name():
     client = BilibiliClient.__new__(BilibiliClient)
     client._sessdata = "test-sessdata"
 
-    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False, use_proxy: bool = True):
         return {"code": 0, "data": {"isLogin": True, "uname": "Roxy"}}
 
     client._request = fake_request
@@ -68,7 +68,7 @@ async def test_validate_sessdata_raises_for_invalid_cookie():
     client = BilibiliClient.__new__(BilibiliClient)
     client._sessdata = "expired-sessdata"
 
-    async def fake_request(url: str, params: dict | None = None, wbi: bool = False):
+    async def fake_request(url: str, params: dict | None = None, wbi: bool = False, use_proxy: bool = True):
         return {"code": 0, "data": {"isLogin": False}}
 
     client._request = fake_request
@@ -253,17 +253,14 @@ async def test_get_video_index_in_range_stops_after_page_reaches_start_date():
 async def test_request_retries_transient_412_for_non_wbi_calls():
     client = BilibiliClient.__new__(BilibiliClient)
     client._fingerprint_ready = True
-    client._rate_limit_count = 0
-    client._base_delay = 1.5
-    client._semaphore = asyncio.Semaphore(1)
-    client._last_request_time = 0
+    client._proxy_urls = []  # no proxy pool — the shared throttle state needs no setup
     sleep_calls = []
     calls = []
 
     async def fake_sleep(delay: float):
         sleep_calls.append(delay)
 
-    async def fake_throttle():
+    async def fake_throttle(via_proxy: bool = False):
         return None
 
     class FakeClient:
@@ -305,10 +302,7 @@ def test_filter_live_replay_stubs_removes_auto_uploaded_replays():
 async def test_request_retries_transient_412_for_wbi_calls_and_refreshes_keys():
     client = BilibiliClient.__new__(BilibiliClient)
     client._fingerprint_ready = True
-    client._rate_limit_count = 0
-    client._base_delay = 1.5
-    client._semaphore = asyncio.Semaphore(1)
-    client._last_request_time = 0
+    client._proxy_urls = []  # no proxy pool — the shared throttle state needs no setup
     client._img_key = "img"
     client._sub_key = "sub"
     client._wbi_keys_ts = 0
@@ -320,7 +314,7 @@ async def test_request_retries_transient_412_for_wbi_calls_and_refreshes_keys():
     async def fake_sleep(delay: float):
         sleep_calls.append(delay)
 
-    async def fake_noop():
+    async def fake_noop(via_proxy: bool = False):
         return None
 
     async def fake_refresh():

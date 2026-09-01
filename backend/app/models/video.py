@@ -22,6 +22,7 @@ class Video(Base):
 
     stats: Mapped[list["VideoStats"]] = relationship(back_populates="video", cascade="all, delete-orphan")
     content: Mapped["VideoContent | None"] = relationship(back_populates="video", cascade="all, delete-orphan", uselist=False)
+    sentiment: Mapped[list["VideoSentiment"]] = relationship(back_populates="video", cascade="all, delete-orphan")
 
 
 class VideoStats(Base):

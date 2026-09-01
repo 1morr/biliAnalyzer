@@ -128,7 +128,7 @@ async def run_sentiment_analysis(query_id: int, force: bool = False):
                 danmaku_items = normalize_items(_safe_json_loads(content.danmakus)) if content.danmakus else []
                 comment_items = normalize_items(_safe_json_loads(content.comments)) if content.comments else []
 
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 danmaku_details = await loop.run_in_executor(
                     None, _analyze_items, danmaku_items, "danmaku", analyzer
                 )
