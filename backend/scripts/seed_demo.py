@@ -1,9 +1,10 @@
 """Seed the local database with fictional demo data.
 
-Without a real SESSDATA configured, ``get_danmakus`` and ``get_subtitle`` both
-return empty results, so a freshly cloned repo shows an app with no danmaku,
-no subtitles, and nothing for sentiment analysis to work on — effectively an
-empty product. This script fabricates one full query's worth of content
+A freshly cloned repo cannot scrape anything at all: ``x/web-interface/view``
+answers HTTP 412 without a logged-in session, so every run dies on the first
+video, and ``get_danmakus``/``get_subtitle`` return empty even when it does not.
+Without this seed the app is an empty shell. This script fabricates one full
+query's worth of content
 (comments, danmaku, subtitles) for a clearly fictional creator, then runs the
 real SnowNLP sentiment pipeline over it, so every dashboard, video-detail,
 word-table and sentiment endpoint has something meaningful to render.

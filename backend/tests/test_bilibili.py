@@ -3,7 +3,29 @@ import asyncio
 from datetime import date
 import httpx
 import pytest
-from app.services.bilibili import BilibiliClient
+from app.services.bilibili import BilibiliBlockedError, BilibiliClient
+
+
+def _offline_client() -> BilibiliClient:
+    """A client with every network side-effect (fingerprint, proxy pool, wbi)
+    already neutralised, so a test drives _request and nothing else."""
+    client = BilibiliClient.__new__(BilibiliClient)
+    client._sessdata = None
+    client._img_key = None
+    client._sub_key = None
+    client._wbi_keys_ts = 0
+    client._fingerprint_ready = True
+    client._proxy_urls = []
+    client._proxy_pool = None
+    return client
+
+
+def _silence_waits(monkeypatch):
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(BilibiliClient, "_throttle", _noop)
+    monkeypatch.setattr("app.services.bilibili.asyncio.sleep", _noop)
 
 
 def test_get_mixin_key():
@@ -490,3 +512,54 @@ async def test_get_video_list_slices_video_index_result():
         "total": 3,
         "page": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_persistent_412_raises_blocked_error(monkeypatch):
+    """412 is Bilibili's risk control, not a transient failure.
+
+    Once the retries are spent it has to surface as BilibiliBlockedError naming
+    SESSDATA, because a bare HTTPStatusError only ever said "Precondition
+    Failed" and the whole query died with nothing the user could act on.
+    """
+    client = _offline_client()
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(412)
+
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    _silence_waits(monkeypatch)
+
+    with pytest.raises(BilibiliBlockedError) as exc:
+        await client._request(f"{BilibiliClient.BASE}/x/web-interface/view", {"bvid": "BV1"})
+
+    assert "SESSDATA" in str(exc.value)
+    assert len(calls) == 3, "should give up after the retry budget, not keep hammering"
+    await client._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_412_that_recovers_still_retries(monkeypatch):
+    """The retry itself must survive: a 412 that clears on the next attempt is
+    a real case (wbi keys going stale), and turning 412 into a hard failure
+    everywhere would have broken it."""
+    client = _offline_client()
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(412)
+        return httpx.Response(200, json={"code": 0, "data": {"title": "ok"}})
+
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    _silence_waits(monkeypatch)
+
+    data = await client._request(f"{BilibiliClient.BASE}/x/web-interface/view", {"bvid": "BV1"})
+
+    assert data["code"] == 0
+    assert data["data"]["title"] == "ok"
+    assert len(calls) == 2
+    await client._client.aclose()

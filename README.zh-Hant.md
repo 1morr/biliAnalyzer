@@ -28,7 +28,7 @@ docker compose up --build -d
 
 ### 立刻看到有資料的畫面
 
-抓一個真實創作者的資料需要一段時間，而且沒有 `SESSDATA` cookie 的話，你拿不到彈幕、字幕，也就做不了情緒分析 —— 整個 App 看起來會空空的。想直接讓每個面板都有像樣的資料，可以：
+抓一個真實創作者的資料需要一段時間，而且必須有 `SESSDATA` cookie。想在沒有 cookie 的情況下讓每個面板都有像樣的資料，可以：
 
 ```bash
 docker compose exec app python -m scripts.seed_demo
@@ -43,7 +43,7 @@ docker compose exec app python -m scripts.seed_demo
 3. **Video detail** —— 單支影片的數據，附雷達圖，以及跟這次查詢平均值的差異。
 4. **AI analysis** —— 在 Settings 裡設定 OpenAI 相容的 Base URL、key 與 model，接著就能追問問題，回答會用串流的方式回傳。
 
-**SESSDATA 是選填的。** 沒有它，其他功能都照樣能用，只是拿不到彈幕、留言與字幕。要加上它：登入 bilibili.com，F12 → Application → Cookies → 複製 `SESSDATA`，貼到 Settings 裡。
+**抓取一定要 SESSDATA。** 每支影片都會經過的 `x/web-interface/view`，對沒有登入狀態的請求一律回 HTTP 412 —— 這是對線上 API 實測確認過的 —— 所以沒有 SESSDATA 的話，一開跑就直接失敗，不會只是功能少一半。要加上它：登入 bilibili.com，F12 → Application → Cookies → 複製 `SESSDATA`，貼到 Settings 裡。想先看看畫面，用上面的 demo seed。
 
 ## 安全性
 

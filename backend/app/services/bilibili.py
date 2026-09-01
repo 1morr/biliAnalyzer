@@ -16,6 +16,17 @@ from app.services.proxy_pool import ProxyPool, redact_url
 
 logger = logging.getLogger(__name__)
 
+
+class BilibiliBlockedError(RuntimeError):
+    """Bilibili refused the request outright with HTTP 412.
+
+    This is risk control, not a transient failure. The endpoints this app relies
+    on (x/web-interface/view in particular) answer 412 to any request without a
+    logged-in session, so retrying or rotating proxies never turns it into a 200
+    when SESSDATA is missing or expired.
+    """
+
+
 # Shared across every BilibiliClient instance so that concurrent scrapes (e.g.
 # two /api/fetch requests) cannot together double the effective request rate
 # into Bilibili's -799 risk control. A per-instance semaphore/delay would let
@@ -201,6 +212,14 @@ class BilibiliClient:
                     )
                     await asyncio.sleep(delay)
                     continue
+                # Retries are spent. Falling through to raise_for_status() here
+                # produced a bare HTTPStatusError that said nothing about the
+                # actual cause, which is almost always a missing or expired
+                # SESSDATA rather than anything the caller can retry.
+                raise BilibiliBlockedError(
+                    "Bilibili rejected the request (HTTP 412). This endpoint requires a "
+                    "logged-in session - set a valid SESSDATA in Settings and try again."
+                )
             resp.raise_for_status()
             data = resp.json()
             code = data.get("code")

@@ -36,9 +36,8 @@ web port.
 
 ### See it with data, immediately
 
-Scraping a real creator takes a while, and without a `SESSDATA` cookie you get
-no danmaku, no subtitles and therefore no sentiment analysis — an empty-looking
-app. To fill every panel with plausible data instead:
+Scraping a real creator takes a while and needs a `SESSDATA` cookie. To fill
+every panel with plausible data without one:
 
 ```bash
 docker compose exec app python -m scripts.seed_demo
@@ -61,9 +60,12 @@ danmaku. Pass `--reset` to start over.
 4. **AI analysis** — configure an OpenAI-compatible Base URL, key and model in
    Settings, then ask follow-up questions; answers stream back.
 
-**SESSDATA is optional.** Without it everything still works except danmaku,
-comments and subtitles. To add it: log in to bilibili.com, F12 → Application →
-Cookies → copy `SESSDATA`, paste it into Settings.
+**SESSDATA is required for scraping.** `x/web-interface/view`, which every
+video goes through, answers HTTP 412 to requests without a logged-in session —
+verified against the live API — so a run without it fails immediately rather
+than degrading. To add it: log in to bilibili.com, F12 → Application → Cookies
+→ copy `SESSDATA`, paste it into Settings. Use the demo seed above to look
+around without one.
 
 ## Security
 

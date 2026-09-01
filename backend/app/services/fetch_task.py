@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.background_tasks import scrape_semaphore, track_task
 from app.core.database import async_session
 from app.models import User, Video, VideoStats, VideoContent, Query, QueryVideo
-from app.services.bilibili import BilibiliClient
+from app.services.bilibili import BilibiliBlockedError, BilibiliClient
 from app.services.sentiment_task import run_sentiment_analysis
 
 logger = logging.getLogger(__name__)
@@ -222,6 +222,15 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                 # Kick off sentiment analysis in background
                 track_task(run_sentiment_analysis(query_id))
 
+            except BilibiliBlockedError as e:
+                # Actionable and safe to show: the text is ours, not an upstream
+                # payload, so surfacing it leaks nothing while telling the user
+                # the one thing that actually fixes the run.
+                logger.warning("Fetch blocked for query %s: %s", query_id, e)
+                query.status = "error"
+                query.error_message = str(e)
+                query.progress = None
+                await db.commit()
             except Exception:
                 logger.exception("Fetch task failed for query %s", query_id)
                 query.status = "error"
