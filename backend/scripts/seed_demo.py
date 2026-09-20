@@ -23,7 +23,7 @@ import json
 import random
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,10 +37,20 @@ from sqlalchemy import select  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 from app.core.database import async_session, init_db  # noqa: E402
-from app.models import Query, QueryVideo, User, Video, VideoContent, VideoStats  # noqa: E402
+from app.models import (  # noqa: E402
+    Query,
+    QueryVideo,
+    User,
+    Video,
+    VideoContent,
+    VideoStats,
+)
 from app.models.sentiment import VideoSentiment  # noqa: E402
-from app.services.sentiment import get_analyzer  # noqa: E402
-from app.services.sentiment_task import _analyze_items, _compute_aggregates  # noqa: E402
+from app.services.sentiment import SnowNLPAnalyzer  # noqa: E402
+from app.services.sentiment_task import (  # noqa: E402
+    _analyze_items,
+    _compute_aggregates,
+)
 from app.services.wordcloud_svc import normalize_items  # noqa: E402
 
 # Fixed seed so re-running (without --reset) produces byte-identical data —
@@ -245,7 +255,7 @@ def _gen_publish_dates(rng: random.Random, count: int, start: date, end: date) -
         day = start + timedelta(days=offset)
         hour = _weighted_hour(rng)
         minute = rng.randint(0, 59)
-        dates.append(datetime(day.year, day.month, day.day, hour, minute, tzinfo=timezone.utc))
+        dates.append(datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC))
     return dates
 
 
@@ -324,11 +334,11 @@ async def seed(reset: bool) -> None:
             await _reset_demo_data(db)
 
         rng = random.Random(RNG_SEED)
-        analyzer = get_analyzer("snownlp")
+        analyzer = SnowNLPAnalyzer()
 
         db.add(User(
             uid=DEMO_UID, name=DEMO_USER_NAME, avatar_url=DEMO_AVATAR,
-            last_fetched_at=datetime.now(timezone.utc),
+            last_fetched_at=datetime.now(UTC),
         ))
 
         video_count = rng.randint(38, 52)
@@ -394,7 +404,7 @@ async def seed(reset: bool) -> None:
                 comments=json.dumps(comments, ensure_ascii=False),
                 danmakus=json.dumps(danmakus, ensure_ascii=False),
                 subtitle=subtitle,
-                fetched_at=datetime.now(timezone.utc),
+                fetched_at=datetime.now(UTC),
             ))
 
             # Run the real sentiment pipeline (same code path as
@@ -418,7 +428,7 @@ async def seed(reset: bool) -> None:
                 comment_negative_pct=comment_agg["negative_pct"],
                 comment_count=comment_agg["count"],
                 details=json.dumps(danmaku_details + comment_details, ensure_ascii=False),
-                analyzed_at=datetime.now(timezone.utc),
+                analyzed_at=datetime.now(UTC),
             ))
 
             totals["views"] += views

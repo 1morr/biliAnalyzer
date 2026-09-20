@@ -1,12 +1,13 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
+
+from sqlalchemy import delete, select
+
 from app.core.database import async_session
 from app.models import Query, QueryVideo, VideoContent, VideoSentiment
-from app.services.sentiment import get_analyzer
+from app.services.sentiment import SnowNLPAnalyzer
 from app.services.wordcloud_svc import normalize_items
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ async def run_sentiment_analysis(query_id: int, force: bool = False):
             query.sentiment_status = "analyzing"
             await db.commit()
 
-            analyzer = get_analyzer("snownlp")
+            analyzer = SnowNLPAnalyzer()
 
             # Get all videos in this query
             result = await db.execute(
@@ -155,7 +156,7 @@ async def run_sentiment_analysis(query_id: int, force: bool = False):
                     comment_negative_pct=comment_agg["negative_pct"],
                     comment_count=comment_agg["count"],
                     details=json.dumps(all_details, ensure_ascii=False),
-                    analyzed_at=datetime.now(timezone.utc),
+                    analyzed_at=datetime.now(UTC),
                 )
                 db.add(sentiment)
                 await db.commit()
