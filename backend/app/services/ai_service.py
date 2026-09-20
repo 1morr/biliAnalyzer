@@ -2,12 +2,14 @@
 import json
 import logging
 from datetime import datetime
+
 from cryptography.fernet import InvalidToken
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import AppSettings
-from app.models.conversation import AIConversation, AIMessage
+
 from app.core.security import decrypt_value
+from app.models import AppSettings
+from app.models.conversation import AIMessage
 from app.services.ai_tools import execute_tool
 
 logger = logging.getLogger(__name__)

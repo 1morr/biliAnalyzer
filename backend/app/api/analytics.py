@@ -1,19 +1,34 @@
 import asyncio
 import json
 from collections import defaultdict
-from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Query as QueryParam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.deps import get_db
-from app.models import Query, QueryVideo, Video, VideoStats, VideoContent
+from app.models import Query, QueryVideo, Video, VideoContent, VideoStats
 from app.schemas.analytics import (
-    StatsSummary, TrendPoint, InteractionData, VideoComparison,
-    WordFrequencyResponse, WordDetailResponse, UserDemographicsResponse,
+    InteractionData,
+    StatsSummary,
+    TrendPoint,
+    UserDemographicsResponse,
+    VideoComparison,
+    WordDetailResponse,
+    WordFrequencyResponse,
 )
 from app.services.wordcloud_svc import (
-    compute_word_frequencies, compute_tag_frequencies, compute_user_frequencies,
-    compute_location_frequencies, compute_user_demographics, extract_word_contexts,
-    extract_user_comments, extract_location_comments, normalize_items, filter_items,
+    compute_location_frequencies,
+    compute_tag_frequencies,
+    compute_user_demographics,
+    compute_user_frequencies,
+    compute_word_frequencies,
+    extract_location_comments,
+    extract_user_comments,
+    extract_word_contexts,
+    filter_items,
+    normalize_items,
 )
 
 router = APIRouter()

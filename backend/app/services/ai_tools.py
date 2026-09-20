@@ -1,14 +1,24 @@
 """OpenAI function-calling tool definitions and executor for the AI agent."""
 import json
 import random
-from collections import Counter, defaultdict
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Query, QueryVideo, Video, VideoStats, VideoContent, VideoSentiment
-from app.services.wordcloud_svc import (
-    compute_word_frequencies, compute_tag_frequencies, normalize_items,
-)
 
+from app.models import (
+    Query,
+    QueryVideo,
+    Video,
+    VideoContent,
+    VideoSentiment,
+    VideoStats,
+)
+from app.services.wordcloud_svc import (
+    compute_tag_frequencies,
+    compute_word_frequencies,
+    normalize_items,
+)
 
 # ---------------------------------------------------------------------------
 # Tool definitions (OpenAI function calling format)
@@ -444,7 +454,10 @@ async def _exec_video_comparison(db: AsyncSession, query_id: int | None, bvid: s
 
 
 async def _exec_demographics(db: AsyncSession, query_id: int | None, bvid: str | None) -> str:
-    from app.services.wordcloud_svc import compute_user_demographics, compute_location_frequencies
+    from app.services.wordcloud_svc import (
+        compute_location_frequencies,
+        compute_user_demographics,
+    )
 
     if bvid:
         result = await db.execute(select(VideoContent).where(VideoContent.bvid == bvid))

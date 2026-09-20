@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy import inspect, select, text
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Import all models so they register with Base.metadata before init_db runs
 import app.models  # noqa: F401 — side-effect import registers all tables
@@ -14,7 +14,6 @@ from app.services.wordcloud_svc import (
     extract_location_comments,
     extract_user_comments,
 )
-
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

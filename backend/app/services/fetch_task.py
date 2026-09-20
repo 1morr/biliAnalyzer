@@ -2,12 +2,14 @@ import asyncio
 import json
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.background_tasks import scrape_semaphore, track_task
 from app.core.database import async_session
-from app.models import User, Video, VideoStats, VideoContent, Query, QueryVideo
+from app.models import Query, QueryVideo, User, Video, VideoContent, VideoStats
 from app.services.bilibili import BilibiliBlockedError, BilibiliClient
 from app.services.sentiment_task import run_sentiment_analysis
 
@@ -31,7 +33,7 @@ async def _upsert_video_content(
     ).scalar_one_or_none()
     comments_json = json.dumps(comments, ensure_ascii=False)
     danmakus_json = json.dumps(danmakus, ensure_ascii=False)
-    fetched_at = datetime.now(timezone.utc)
+    fetched_at = datetime.now(UTC)
 
     if existing:
         existing.comments = comments_json
@@ -73,11 +75,11 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                 if existing_user:
                     existing_user.name = user_info["name"]
                     existing_user.avatar_url = user_info["avatar_url"]
-                    existing_user.last_fetched_at = datetime.now(timezone.utc)
+                    existing_user.last_fetched_at = datetime.now(UTC)
                 else:
                     db.add(User(uid=uid, name=user_info["name"],
                                avatar_url=user_info["avatar_url"],
-                               last_fetched_at=datetime.now(timezone.utc)))
+                               last_fetched_at=datetime.now(UTC)))
                 query.user_name = user_info["name"]
                 await db.commit()
 
@@ -88,7 +90,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     pub_ts = int(v.get("published_ts") or v.get("created") or 0)
                     if pub_ts <= 0:
                         continue
-                    pub_date = datetime.fromtimestamp(pub_ts, tz=timezone.utc).date()
+                    pub_date = datetime.fromtimestamp(pub_ts, tz=UTC).date()
                     if start_date <= pub_date <= end_date:
                         all_videos.append(v)
 
@@ -111,7 +113,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                     subtitle_flags[bvid] = detail.get("has_subtitle", False)
 
                     # Upsert Video
-                    published_at = datetime.fromtimestamp(detail["published_at"], tz=timezone.utc)
+                    published_at = datetime.fromtimestamp(detail["published_at"], tz=UTC)
                     existing = await db.get(Video, bvid)
                     if not existing:
                         video = Video(
@@ -132,7 +134,7 @@ async def run_fetch(query_id: int, uid: int, start_date, end_date, sessdata: str
                         existing.duration = detail["duration"]
                         existing.published_at = published_at
                         existing.tags = detail["tags"]
-                        existing.updated_at = datetime.now(timezone.utc)
+                        existing.updated_at = datetime.now(UTC)
 
                     # Add stats snapshot
                     s = detail["stats"]

@@ -1,20 +1,28 @@
 import asyncio
-import json
-from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Query as QueryParam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.background_tasks import track_task
 from app.core.deps import get_db
 from app.models import Query, QueryVideo, Video, VideoSentiment
 from app.schemas.sentiment import (
-    SentimentOverview, SentimentDistribution, SentimentTrendPoint,
-    SentimentWordItem, DemographicSentimentCell,
+    DemographicSentimentCell,
     SentimentContextResponse,
+    SentimentDistribution,
+    SentimentOverview,
+    SentimentTrendPoint,
+    SentimentWordItem,
 )
 from app.services.sentiment_svc import (
-    compute_sentiment_distribution, compute_sentiment_trend,
-    compute_sentiment_word_cloud, compute_demographic_sentiment_matrix,
-    filter_sentiment_contexts, _safe_json_loads,
+    _safe_json_loads,
+    compute_demographic_sentiment_matrix,
+    compute_sentiment_distribution,
+    compute_sentiment_trend,
+    compute_sentiment_word_cloud,
+    filter_sentiment_contexts,
 )
 from app.services.sentiment_task import run_sentiment_analysis
 

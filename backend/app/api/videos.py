@@ -1,11 +1,19 @@
 import math
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Query as QueryParam
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.deps import get_db
-from app.models import Video, VideoStats, VideoContent, QueryVideo
-from app.schemas.video import VideoDetail, VideoSummary, VideoStatsSchema, PaginatedVideos
+from app.models import QueryVideo, Video, VideoContent, VideoStats
+from app.schemas.video import (
+    PaginatedVideos,
+    VideoDetail,
+    VideoStatsSchema,
+    VideoSummary,
+)
 
 router = APIRouter()
 

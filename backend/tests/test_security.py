@@ -1,7 +1,9 @@
-import pytest
-import importlib
 from unittest.mock import patch
+
+import pytest
 from cryptography.fernet import Fernet
+
+from app.core.security import decrypt_value, encrypt_value, get_fernet
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +29,6 @@ def get_fernet_fresh(tmp_path):
     return Fernet(Fernet.generate_key())
 
 
-from app.core.security import encrypt_value, decrypt_value, get_fernet
 
 
 def test_encrypt_decrypt_roundtrip():
@@ -56,7 +57,6 @@ def test_decrypt_invalid_token():
 
 def test_secret_key_file_created(tmp_path):
     """get_fernet() should auto-create a .secret_key file when none exists."""
-    import app.core.security as sec_module
 
     key_path = tmp_path / ".secret_key"
     assert not key_path.exists()
@@ -71,7 +71,6 @@ def test_secret_key_file_created(tmp_path):
 
 def test_secret_key_file_reused(tmp_path):
     """get_fernet() should reuse an existing .secret_key file."""
-    import app.core.security as sec_module
 
     # Pre-write a known key
     known_key = Fernet.generate_key().decode()

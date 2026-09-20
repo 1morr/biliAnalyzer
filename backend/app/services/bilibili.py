@@ -1,6 +1,5 @@
 # backend/app/services/bilibili.py
 import asyncio
-from datetime import datetime, timezone
 import hashlib
 import logging
 import random
@@ -8,6 +7,7 @@ import re
 import time
 import urllib.parse
 import uuid
+from datetime import UTC, datetime
 
 import defusedxml.ElementTree as ElementTree
 import httpx
@@ -385,7 +385,7 @@ class BilibiliClient:
         published_ts = int(video.get("published_ts") or video.get("created") or 0)
         if published_ts <= 0:
             return None
-        return datetime.fromtimestamp(published_ts, tz=timezone.utc).date()
+        return datetime.fromtimestamp(published_ts, tz=UTC).date()
 
     def _filter_videos_by_date(self, videos: list[dict], start_date, end_date) -> list[dict]:
         results = []

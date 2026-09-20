@@ -8,7 +8,6 @@ from app.api.videos import list_videos
 from app.core.database import Base
 from app.models import Query, QueryVideo, User, Video, VideoStats
 
-
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 

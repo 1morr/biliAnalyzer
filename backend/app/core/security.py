@@ -1,6 +1,7 @@
-import os
 from pathlib import Path
+
 from cryptography.fernet import Fernet
+
 from app.core.config import settings
 
 _fernet_instance: Fernet | None = None

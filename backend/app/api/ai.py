@@ -2,20 +2,29 @@
 import json
 import logging
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
+
 from app.core.deps import get_db
 from app.models import Query, Video
 from app.models.conversation import AIConversation, AIMessage
 from app.schemas.ai import (
-    CreateConversationRequest, SendMessageRequest,
-    ConversationSummary, ConversationDetail, MessageResponse, ToolCallInfo,
+    ConversationDetail,
+    ConversationSummary,
+    CreateConversationRequest,
+    MessageResponse,
+    SendMessageRequest,
+    ToolCallInfo,
 )
-from app.services.ai_prompts import get_system_prompt, get_initial_message
+from app.services.ai_prompts import get_initial_message, get_system_prompt
 from app.services.ai_service import (
-    get_openai_client, build_messages_from_db, save_message, stream_agent_response,
+    build_messages_from_db,
+    get_openai_client,
+    save_message,
+    stream_agent_response,
 )
 from app.services.ai_tools import get_tools
 
@@ -199,8 +208,6 @@ async def _send_message_stream(
     conv = await db.get(AIConversation, conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-
-    lang = _detect_lang(request)
 
     # Save user message. Commit (not just flush) so the message survives even
     # if the AI call below fails — see the matching comment in

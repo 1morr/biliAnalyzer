@@ -1,12 +1,19 @@
 # backend/app/api/settings.py
 import logging
+
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.deps import get_db
+from app.core.security import decrypt_value, encrypt_value
 from app.models import AppSettings
-from app.schemas.settings import SettingsResponse, SettingsUpdate, SessdataTestRequest, AiTestRequest
-from app.core.security import encrypt_value, decrypt_value
+from app.schemas.settings import (
+    AiTestRequest,
+    SessdataTestRequest,
+    SettingsResponse,
+    SettingsUpdate,
+)
 from app.services.bilibili import BilibiliClient
 
 logger = logging.getLogger(__name__)

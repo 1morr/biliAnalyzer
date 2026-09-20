@@ -1,8 +1,14 @@
 import json
 from collections import Counter, defaultdict
+
 import jieba
+
 from app.services.wordcloud_svc import (
-    STOP_WORDS, _normalize_gender, _normalize_level, _normalize_vip, _normalize_location,
+    STOP_WORDS,
+    _normalize_gender,
+    _normalize_level,
+    _normalize_location,
+    _normalize_vip,
 )
 
 

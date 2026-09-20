@@ -1,7 +1,13 @@
 from datetime import datetime
-from sqlalchemy import Integer, Text, DateTime, Float, ForeignKey, func
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.video import Video
 
 
 class VideoSentiment(Base):

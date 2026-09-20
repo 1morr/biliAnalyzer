@@ -1,11 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
+
+from app.api import ai, analytics, fetch, queries, sentiment, videos
+from app.api import settings as settings_api
 from app.core.config import settings
 from app.core.database import async_session, init_db
 from app.models import Query
@@ -71,7 +75,6 @@ if settings.CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-from app.api import fetch, queries, videos, analytics, ai, settings as settings_api, sentiment
 
 app.include_router(fetch.router, prefix="/api", tags=["fetch"])
 app.include_router(queries.router, prefix="/api", tags=["queries"])

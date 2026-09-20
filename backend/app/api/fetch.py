@@ -1,13 +1,15 @@
 import logging
+
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.background_tasks import track_task
 from app.core.deps import get_db
+from app.core.security import decrypt_value
 from app.models import AppSettings, Query
 from app.schemas.query import FetchRequest, FetchResponse
 from app.services.fetch_task import run_fetch
-from app.core.security import decrypt_value
 
 logger = logging.getLogger(__name__)
 
