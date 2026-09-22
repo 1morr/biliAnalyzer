@@ -32,3 +32,10 @@ SESSDATA is a hard requirement (anonymous calls get HTTP 412).
 - `frontend/.npmrc` sets `legacy-peer-deps=true` to paper over vite 8 / react 19 /
   eslint 9 peer conflicts; do not treat that as a clean bill of health when bumping deps.
 - Commits: Conventional Commits, English.
+- **`CHANGELOG.md` is a work log, not a release changelog** (this project has no
+  versions). Record behaviour changes, removals, and decisions backed by a
+  measurement; skip pure formatting and renames. Write the entry in the same
+  change that makes it, not afterwards.
+- **One commit, one change, and the subject must cover everything the diff
+  touches.** A commit that also edits something its message does not mention is
+  how work becomes invisible; `git log --stat` is the check.
