@@ -11,6 +11,15 @@ LLM makes of all three.
 
 **English** · [繁體中文](README.zh-Hant.md)
 
+Bilibili's creator centre shows totals and trend lines for your own account
+only, and nowhere on the site are comments or danmaku ever counted — they can
+only be read one video at a time. BiliAnalyzer answers the questions those
+pages cannot: what a creator's last few months actually looked like, which
+words and topics the audience responded to, whether the tone shifted, and how
+each audience segment behaved. It takes any public UID, so it works for a
+creator reviewing their own run, a fan or analyst studying someone else's, or
+anyone comparing two.
+
 Give it a UID and a date range. It fetches every video the creator posted in
 that window, then charts the performance, tokenizes the titles, tags, subtitles,
 danmaku and comments into drillable word tables, scores sentiment, and crosses
